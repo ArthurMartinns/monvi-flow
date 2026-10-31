@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: monviflow
+
+  datasource:
+    url: jdbc:postgresql://localhost:5434/monviflow
+    username: monviflow
+    password: ${POSTGRES_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
