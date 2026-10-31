@@ -19,6 +19,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -117,6 +118,7 @@ class UserRegistrationTests extends PostgresIntegrationTest {
 
     private ResultActions register(String body) throws Exception {
         return mvc.perform(post("/api/users")
+            .with(csrf())
             .contentType(MediaType.APPLICATION_JSON)
             .content(body));
     }
