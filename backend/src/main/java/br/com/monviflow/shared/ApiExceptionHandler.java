@@ -20,23 +20,23 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException exception) {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST,
-            "Dados inválidos", "Confira os campos informados.");
+                "Dados inválidos", "Confira os campos informados.");
         // Não incluir valores rejeitados: podem conter a senha.
         problem.setProperty("fields", exception.getBindingResult().getFieldErrors()
-            .stream().map(error -> error.getField()).distinct().sorted().toList());
+                .stream().map(error -> error.getField()).distinct().sorted().toList());
         return problem;
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleInvalidBody() {
         return problem(HttpStatus.BAD_REQUEST, "Corpo inválido",
-            "Envie um objeto JSON válido com nome, e-mail e senha.");
+                "Envie um objeto JSON válido com os campos esperados.");
     }
 
     @ExceptionHandler(DataAccessException.class)
     public ProblemDetail handleUnexpectedError() {
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno",
-            "Não foi possível concluir a operação.");
+                "Não foi possível concluir a operação.");
     }
 
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
