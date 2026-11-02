@@ -31,6 +31,7 @@ export async function request<T>(
       400: "Confira os campos informados.",
       401: "Sua sessão expirou. Entre novamente.",
       403: "Sua sessão de segurança expirou. Tente novamente.",
+      404: "Registro não encontrado. Atualize a página.",
       409: "Este e-mail já está cadastrado.",
     };
     const fields = Array.isArray(body?.fields)
@@ -55,12 +56,24 @@ export async function post<T>(
   body: string,
   contentType: string,
 ): Promise<T> {
+  return send<T>("POST", path, body, contentType);
+}
+
+export async function send<T>(
+  method: "POST" | "PATCH" | "DELETE",
+  path: string,
+  body?: string,
+  contentType = "application/json",
+): Promise<T> {
   const csrf = await request<{ token: string; headerName: string }>(
     "/api/auth/csrf",
   );
   return request<T>(path, {
-    method: "POST",
-    headers: { "Content-Type": contentType, [csrf.headerName]: csrf.token },
+    method,
+    headers: {
+      ...(body !== undefined ? { "Content-Type": contentType } : {}),
+      [csrf.headerName]: csrf.token,
+    },
     body,
   });
 }

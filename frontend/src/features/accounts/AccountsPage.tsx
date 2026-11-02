@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { createAccount, listAccounts } from "../../lib/accounts";
+import {
+  createAccount,
+  deleteAccount,
+  listAccounts,
+  renameAccount,
+} from "../../lib/accounts";
 import type { Account } from "../../lib/accounts";
 import { ApiError } from "../../lib/http";
 import { formatMoney, parseBalance } from "../../lib/money";
@@ -47,6 +52,9 @@ export default function AccountsPage({ onSessionExpired }: Props) {
   const [notice, setNotice] = useState("");
   const [fields, setFields] = useState<string[]>([]);
   const [modal, setModal] = useState<"create" | Account | null>(null);
+  const [accountAction, setAccountAction] = useState<
+    "details" | "rename" | "delete"
+  >("details");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const pageRef = useRef<HTMLElement>(null);
@@ -85,7 +93,8 @@ export default function AccountsPage({ onSessionExpired }: Props) {
     return () => {
       document.body.style.overflow = previousOverflow;
       dialog.close();
-      triggerRef.current?.focus();
+      if (triggerRef.current?.isConnected) triggerRef.current.focus();
+      else pageRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     };
   }, [modal]);
 
@@ -109,11 +118,64 @@ export default function AccountsPage({ onSessionExpired }: Props) {
     setModal("create");
   }
 
-  function openDetails(account: Account, button: HTMLButtonElement) {
+  function openDetails(
+    account: Account,
+    button: HTMLButtonElement,
+    action: "details" | "rename" | "delete" = "details",
+  ) {
     const menu = button.closest("details");
     triggerRef.current = menu?.querySelector("summary") ?? null;
     if (menu) menu.open = false;
+    setAccountAction(action);
+    setFormError("");
+    setFields([]);
+    setNotice("");
     setModal(account);
+  }
+
+  async function submitAccountAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAccount || saving || accountAction === "details") return;
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get("name") ?? "").trim();
+    setFormError("");
+    setFields([]);
+    if (accountAction === "rename" && !name) {
+      setFields(["name"]);
+      setFormError("Informe o nome da conta.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (accountAction === "rename") {
+        const updated = await renameAccount(selectedAccount.id, name);
+        setAccounts((accounts) =>
+          accounts.map((account) =>
+            account.id === updated.id ? updated : account,
+          ),
+        );
+        setNotice("Conta renomeada com sucesso.");
+      } else {
+        await deleteAccount(selectedAccount.id);
+        setAccounts((accounts) =>
+          accounts.filter((account) => account.id !== selectedAccount.id),
+        );
+        setNotice("Conta excluída.");
+      }
+      setModal(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) onSessionExpired();
+      else {
+        setFormError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível concluir a operação.",
+        );
+        if (error instanceof ApiError) setFields(error.fields);
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -392,6 +454,22 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                       >
                         Ver detalhes
                       </button>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          openDetails(account, event.currentTarget, "rename")
+                        }
+                      >
+                        Renomear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          openDetails(account, event.currentTarget, "delete")
+                        }
+                      >
+                        Excluir conta
+                      </button>
                     </div>
                   </details>
                 </div>
@@ -476,14 +554,24 @@ export default function AccountsPage({ onSessionExpired }: Props) {
               "m-0 mt-6 text-[27px] leading-[1.25] font-semibold tracking-[-.03em] [overflow-wrap:anywhere]"
             }
           >
-            {selectedAccount ? selectedAccount.name : "Nova conta"}
+            {selectedAccount
+              ? accountAction === "rename"
+                ? "Renomear conta"
+                : accountAction === "delete"
+                  ? "Excluir conta?"
+                  : selectedAccount.name
+              : "Nova conta"}
           </h2>
           <p
             id="account-modal-description"
             className={"m-0 mt-2.5 text-sm leading-[23px] text-[#6e7b70]"}
           >
             {selectedAccount
-              ? "Os saldos desta conta, em reais."
+              ? accountAction === "rename"
+                ? "Altere o nome. Os saldos serão mantidos."
+                : accountAction === "delete"
+                  ? `A conta “${selectedAccount.name}” será excluída. Esta ação não pode ser desfeita.`
+                  : "Os saldos desta conta, em reais."
               : "Dê um nome à conta e informe seu saldo de partida."}
           </p>
 
@@ -583,7 +671,77 @@ export default function AccountsPage({ onSessionExpired }: Props) {
             </form>
           )}
 
-          {selectedAccount && (
+          {selectedAccount && accountAction !== "details" && (
+            <form
+              onSubmit={submitAccountAction}
+              aria-busy={saving}
+              className="mt-7"
+            >
+              <fieldset
+                disabled={saving}
+                className="m-0 grid min-w-0 gap-5 border-0 p-0"
+              >
+                {accountAction === "rename" && (
+                  <div className="grid gap-2">
+                    <label
+                      htmlFor="rename-account"
+                      className="text-sm font-medium"
+                    >
+                      Nome da conta
+                    </label>
+                    <input
+                      id="rename-account"
+                      name="name"
+                      className={inputClass}
+                      defaultValue={selectedAccount.name}
+                      autoFocus
+                      required
+                      maxLength={100}
+                      aria-invalid={fields.includes("name")}
+                      aria-describedby={
+                        fields.includes("name")
+                          ? "account-action-error"
+                          : undefined
+                      }
+                    />
+                  </div>
+                )}
+                {formError && (
+                  <p
+                    id="account-action-error"
+                    role="alert"
+                    className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800"
+                  >
+                    {formError}
+                  </p>
+                )}
+                <div className="flex flex-wrap justify-end gap-3 border-t border-[#e0e6dc] pt-5">
+                  <button
+                    type="button"
+                    onClick={() => setModal(null)}
+                    autoFocus={accountAction === "delete"}
+                    className="min-h-11 cursor-pointer rounded-xl border border-[#e0e6dc] px-5 text-sm text-[#657160] hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
+                  >
+                    Cancelar
+                  </button>
+                  {accountAction === "rename" ? (
+                    <button type="submit" className={primaryButtonClass}>
+                      {saving ? "Salvando…" : "Salvar nome"}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="min-h-11 cursor-pointer rounded-xl bg-[#a33932] px-5 text-sm font-semibold text-white hover:bg-[#892e29] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a33932] disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {saving ? "Excluindo…" : "Excluir conta"}
+                    </button>
+                  )}
+                </div>
+              </fieldset>
+            </form>
+          )}
+
+          {selectedAccount && accountAction === "details" && (
             <dl
               className={
                 "m-0 mt-[26px] rounded-[14px] border border-[#e0e6dc] bg-[#f5f7f0] p-5 [&>div+div]:mt-5 [&>div+div]:border-t [&>div+div]:border-[#e0e6dc] [&>div+div]:pt-4 [&_dt]:text-[13px] [&_dt]:text-[#6e7b70] [&_dd]:m-0 [&_dd]:mt-2 [&_dd]:tabular-nums [&_dd]:[overflow-wrap:anywhere]"

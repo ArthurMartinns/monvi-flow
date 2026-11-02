@@ -2,6 +2,8 @@ package br.com.monviflow.account;
 
 import br.com.monviflow.user.UserRepository;
 import java.util.List;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,35 @@ public class AccountService {
     public List<AccountResponse> list(String email) {
         return accounts.findAllByUserIdOrderByIdAsc(userId(email))
                 .stream().map(AccountResponse::from).toList();
+    }
+
+    @Transactional
+    public AccountResponse rename(String email, Long id, RenameAccountRequest request) {
+        Account account = find(email, id);
+        account.rename(request.name());
+        return AccountResponse.from(account);
+    }
+
+    @Transactional
+    public void delete(String email, Long id) {
+        Account account = find(email, id);
+        try {
+            accounts.delete(account);
+            accounts.flush();
+        } catch (DataIntegrityViolationException exception) {
+            for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ConstraintViolationException violation
+                        && "23503".equals(violation.getSQLState())) {
+                    throw new AccountInUseException();
+                }
+            }
+            throw exception;
+        }
+    }
+
+    private Account find(String email, Long id) {
+        return accounts.findByIdAndUserId(id, userId(email))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private Long userId(String email) {

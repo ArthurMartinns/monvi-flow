@@ -3,12 +3,14 @@ package br.com.monviflow.account;
 import br.com.monviflow.PostgresIntegrationTest;
 import br.com.monviflow.user.User;
 import br.com.monviflow.user.UserRepository;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,6 +28,8 @@ class AccountTests extends PostgresIntegrationTest {
     private AccountRepository accounts;
     @Autowired
     private UserRepository users;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setup() {
@@ -33,6 +37,96 @@ class AccountTests extends PostgresIntegrationTest {
         users.deleteAll();
         users.save(new User("Arthur", "arthur@example.com", "unused"));
         users.save(new User("Maria", "maria@example.com", "unused"));
+    }
+
+    @Test
+    void shouldRenameWithoutChangingBalance() throws Exception {
+        Account account = createAccount("arthur@example.com");
+        mvc.perform(patch("/api/accounts/{id}", account.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"name":" Nova conta ","initialBalance":"5000.00"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Nova conta"))
+                .andExpect(jsonPath("$.initialBalance").value("-125.90"))
+                .andExpect(jsonPath("$.currentBalance").value("-125.90"));
+        assertEquals("Nova conta", accounts.findById(account.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void shouldDeleteOwnAccount() throws Exception {
+        Account account = createAccount("arthur@example.com");
+        mvc.perform(delete("/api/accounts/{id}", account.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertEquals(0, accounts.count());
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void shouldNotChangeAnotherUsersAccount() throws Exception {
+        Account account = createAccount("maria@example.com");
+        for (Long id : new Long[] {account.getId(), 0L}) {
+            mvc.perform(patch("/api/accounts/{id}", id)
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Outro nome\"}"))
+                    .andExpect(status().isNotFound());
+            mvc.perform(delete("/api/accounts/{id}", id)
+                    .with(user("arthur@example.com")).with(csrf()))
+                    .andExpect(status().isNotFound());
+        }
+        assertEquals("Carteira", accounts.findById(account.getId()).orElseThrow().getName());
+        assertEquals(1, accounts.count());
+    }
+
+    @Test
+    void shouldValidateNewName() throws Exception {
+        Account account = createAccount("arthur@example.com");
+        for (String name : new String[] {" ", "a".repeat(101)}) {
+            mvc.perform(patch("/api/accounts/{id}", account.getId())
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals("Carteira", accounts.findById(account.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void shouldProtectRenameAndDelete() throws Exception {
+        Account account = createAccount("arthur@example.com");
+        mvc.perform(patch("/api/accounts/{id}", account.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/accounts/{id}", account.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/accounts/{id}", account.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/accounts/{id}", account.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        assertEquals(1, accounts.count());
+    }
+
+    @Test
+    void shouldKeepAccountWithLinkedRecords() throws Exception {
+        Account account = createAccount("arthur@example.com");
+        jdbc.execute("CREATE TABLE account_reference_test (account_id BIGINT REFERENCES account(id))");
+        try {
+            jdbc.update("INSERT INTO account_reference_test VALUES (?)", account.getId());
+            mvc.perform(delete("/api/accounts/{id}", account.getId())
+                    .with(user("arthur@example.com")).with(csrf()))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.title").value("Conta em uso"));
+            assertEquals(1, accounts.count());
+        } finally {
+            jdbc.execute("DROP TABLE account_reference_test");
+        }
+    }
+
+    private Account createAccount(String email) {
+        Long userId = users.findByEmail(email).orElseThrow().getId();
+        return accounts.saveAndFlush(new Account(userId, "Carteira", new BigDecimal("-125.90")));
     }
 
     @Test

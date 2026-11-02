@@ -37,6 +37,10 @@ public class Account {
         return name;
     }
 
+    public void rename(String name) {
+        this.name = name;
+    }
+
     public BigDecimal getInitialBalance() {
         return initialBalance;
     }

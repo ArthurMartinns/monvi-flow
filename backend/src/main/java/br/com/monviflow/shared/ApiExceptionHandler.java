@@ -1,6 +1,7 @@
 package br.com.monviflow.shared;
 
 import br.com.monviflow.user.EmailAlreadyRegisteredException;
+import br.com.monviflow.account.AccountInUseException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -11,6 +12,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(AccountInUseException.class)
+    public ProblemDetail handleAccountInUse(AccountInUseException exception) {
+        return problem(HttpStatus.CONFLICT, "Conta em uso", exception.getMessage());
+    }
 
     @ExceptionHandler(EmailAlreadyRegisteredException.class)
     public ProblemDetail handleDuplicateEmail(EmailAlreadyRegisteredException exception) {
