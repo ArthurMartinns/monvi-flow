@@ -2,6 +2,8 @@ package br.com.monviflow.category;
 
 import br.com.monviflow.user.UserRepository;
 import java.util.List;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,35 @@ public class CategoryService {
     public List<CategoryResponse> list(String email) {
         return categories.findAllByUserIdOrderByIdAsc(userId(email))
                 .stream().map(CategoryResponse::from).toList();
+    }
+
+    @Transactional
+    public CategoryResponse rename(String email, Long id, RenameCategoryRequest request) {
+        Category category = find(email, id);
+        category.rename(request.name());
+        return CategoryResponse.from(category);
+    }
+
+    @Transactional
+    public void delete(String email, Long id) {
+        Category category = find(email, id);
+        try {
+            categories.delete(category);
+            categories.flush();
+        } catch (DataIntegrityViolationException exception) {
+            for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ConstraintViolationException violation
+                        && "23503".equals(violation.getSQLState())) {
+                    throw new CategoryInUseException();
+                }
+            }
+            throw exception;
+        }
+    }
+
+    private Category find(String email, Long id) {
+        return categories.findByIdAndUserId(id, userId(email))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private Long userId(String email) {

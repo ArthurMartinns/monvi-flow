@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,6 +27,8 @@ class CategoryTests extends PostgresIntegrationTest {
     private CategoryRepository categories;
     @Autowired
     private UserRepository users;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setup() {
@@ -97,5 +100,94 @@ class CategoryTests extends PostgresIntegrationTest {
         mvc.perform(post("/api/categories").with(user("arthur@example.com")))
                 .andExpect(status().isForbidden());
         assertEquals(0, categories.count());
+    }
+
+    @Test
+    void shouldRenameWithoutChangingType() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        mvc.perform(patch("/api/categories/{id}", category.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"name":" Transporte ","type":"INCOME"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Transporte"))
+                .andExpect(jsonPath("$.type").value("EXPENSE"));
+        assertEquals("Transporte", categories.findById(category.getId()).orElseThrow().getName());
+        assertEquals(CategoryType.EXPENSE, categories.findById(category.getId()).orElseThrow().getType());
+    }
+
+    @Test
+    void shouldDeleteOwnCategory() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        mvc.perform(delete("/api/categories/{id}", category.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertEquals(0, categories.count());
+    }
+
+    @Test
+    void shouldNotChangeAnotherUsersCategory() throws Exception {
+        Category category = createCategory("maria@example.com");
+        for (Long id : new Long[] {category.getId(), 0L}) {
+            mvc.perform(patch("/api/categories/{id}", id)
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Outro nome\"}"))
+                    .andExpect(status().isNotFound());
+            mvc.perform(delete("/api/categories/{id}", id)
+                    .with(user("arthur@example.com")).with(csrf()))
+                    .andExpect(status().isNotFound());
+        }
+        assertEquals(1, categories.count());
+        assertEquals("Alimentacao", categories.findById(category.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void shouldValidateNewName() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        for (String body : new String[] {"{}", "{\"name\":null}", "{\"name\":\" \"}",
+                "{\"name\":\"" + "a".repeat(101) + "\"}"}) {
+            mvc.perform(patch("/api/categories/{id}", category.getId())
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals("Alimentacao", categories.findById(category.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void shouldProtectRenameAndDelete() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        mvc.perform(patch("/api/categories/{id}", category.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/categories/{id}", category.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/categories/{id}", category.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/categories/{id}", category.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        assertEquals(1, categories.count());
+    }
+
+    @Test
+    void shouldKeepCategoryWithLinkedRecords() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        jdbc.execute("CREATE TABLE category_reference_test (category_id BIGINT REFERENCES category(id))");
+        try {
+            jdbc.update("INSERT INTO category_reference_test VALUES (?)", category.getId());
+            mvc.perform(delete("/api/categories/{id}", category.getId())
+                    .with(user("arthur@example.com")).with(csrf()))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.title").value("Categoria em uso"));
+            assertEquals(1, categories.count());
+        } finally {
+            jdbc.execute("DROP TABLE category_reference_test");
+        }
+    }
+
+    private Category createCategory(String email) {
+        Long userId = users.findByEmail(email).orElseThrow().getId();
+        return categories.saveAndFlush(new Category(userId, "Alimentacao", CategoryType.EXPENSE));
     }
 }

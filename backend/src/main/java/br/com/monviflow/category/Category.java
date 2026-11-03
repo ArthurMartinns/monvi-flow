@@ -37,6 +37,10 @@ public class Category {
         return name;
     }
 
+    public void rename(String name) {
+        this.name = name;
+    }
+
     public CategoryType getType() {
         return type;
     }

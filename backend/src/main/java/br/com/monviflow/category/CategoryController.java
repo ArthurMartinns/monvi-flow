@@ -26,4 +26,16 @@ public class CategoryController {
     public List<CategoryResponse> list(Authentication auth) {
         return service.list(auth.getName());
     }
+
+    @PatchMapping("/{id}")
+    public CategoryResponse rename(Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody RenameCategoryRequest request) {
+        return service.rename(auth.getName(), id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(Authentication auth, @PathVariable Long id) {
+        service.delete(auth.getName(), id);
+    }
 }

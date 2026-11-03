@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { createCategory, listCategories } from "../../lib/categories";
+import {
+  createCategory,
+  deleteCategory,
+  listCategories,
+  renameCategory,
+} from "../../lib/categories";
 import type { Category } from "../../lib/categories";
 import { ApiError } from "../../lib/http";
 
@@ -8,6 +13,10 @@ const buttonClass =
   "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#004d3c] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-wait disabled:opacity-50";
 const inputClass =
   "mt-2 block h-12 w-full rounded-xl border border-[#d9e1d4] bg-white px-3.5 text-sm text-[#153c32] outline-none focus:border-[#004d3c] focus:ring-3 focus:ring-[#004d3c]/5 aria-invalid:border-red-600";
+
+type Modal =
+  | { action: "create" }
+  | { action: "rename" | "delete"; category: Category };
 
 export default function CategoriesPage({
   onSessionExpired,
@@ -18,13 +27,14 @@ export default function CategoriesPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState<Modal | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [fields, setFields] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,49 +61,73 @@ export default function CategoriesPage({
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!modal || !dialog) return;
     dialog.showModal();
-    const trigger = triggerRef.current;
+    const trigger = returnFocusRef.current;
+    const fallback = triggerRef.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = overflow;
       dialog.close();
-      trigger?.focus();
+      if (trigger?.isConnected) trigger.focus();
+      else fallback?.focus();
     };
-  }, [open]);
+  }, [modal]);
+
+  function openModal(next: Modal, trigger: HTMLButtonElement) {
+    returnFocusRef.current = trigger;
+    setFormError("");
+    setFields([]);
+    setNotice("");
+    setModal(next);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || !modal) return;
     const data = new FormData(event.currentTarget);
     const name = String(data.get("name") ?? "").trim();
     const type = String(data.get("type"));
     setFields([]);
     setFormError("");
-    if (!name || name.length > 100) {
+    if (modal.action !== "delete" && (!name || name.length > 100)) {
       setFields(["name"]);
       setFormError("Informe um nome com até 100 caracteres.");
       return;
     }
-    if (type !== "INCOME" && type !== "EXPENSE") {
+    if (modal.action === "create" && type !== "INCOME" && type !== "EXPENSE") {
       setFields(["type"]);
       setFormError("Selecione o tipo da categoria.");
       return;
     }
     setSaving(true);
     try {
-      const category = await createCategory(name, type);
-      setCategories((items) => [...items, category]);
-      setOpen(false);
-      setNotice("Categoria criada com sucesso.");
+      if (modal.action === "delete") {
+        await deleteCategory(modal.category.id);
+        setCategories((items) =>
+          items.filter((item) => item.id !== modal.category.id),
+        );
+        setNotice("Categoria excluída.");
+      } else if (modal.action === "rename") {
+        const updated = await renameCategory(modal.category.id, name);
+        setCategories((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        setNotice("Categoria renomeada com sucesso.");
+      } else if (type === "INCOME" || type === "EXPENSE") {
+        const category = await createCategory(name, type);
+        setCategories((items) => [...items, category]);
+        setNotice("Categoria criada com sucesso.");
+      }
+      setModal(null);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) onSessionExpired();
       else {
         setFormError(
           error instanceof Error
             ? error.message
-            : "Não foi possível criar a categoria.",
+            : "Não foi possível concluir a operação.",
         );
         if (error instanceof ApiError) setFields(error.fields);
       }
@@ -123,12 +157,9 @@ export default function CategoriesPage({
           ref={triggerRef}
           type="button"
           className={buttonClass}
-          onClick={() => {
-            setFormError("");
-            setFields([]);
-            setNotice("");
-            setOpen(true);
-          }}
+          onClick={(event) =>
+            openModal({ action: "create" }, event.currentTarget)
+          }
         >
           <span aria-hidden="true" className="text-lg font-normal">
             +
@@ -225,9 +256,63 @@ export default function CategoriesPage({
                             <path d="M6 18 18 6M6 6h12v12" />
                           </svg>
                         </span>
-                        <span className="min-w-0 font-medium break-words">
+                        <span className="min-w-0 flex-1 font-medium break-words">
                           {category.name}
                         </span>
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            type="button"
+                            aria-label={`Renomear ${category.name}`}
+                            title="Renomear"
+                            onClick={(event) =>
+                              openModal(
+                                { action: "rename", category },
+                                event.currentTarget,
+                              )
+                            }
+                            className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-[#e9efe2] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#004d3c]"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="m16 3 5 5L9 20l-6 1 1-6L16 3ZM14 5l5 5" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Excluir ${category.name}`}
+                            title="Excluir"
+                            onClick={(event) =>
+                              openModal(
+                                { action: "delete", category },
+                                event.currentTarget,
+                              )
+                            }
+                            className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+                            </svg>
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -238,7 +323,7 @@ export default function CategoriesPage({
         </div>
       )}
 
-      {open && (
+      {modal && (
         <dialog
           ref={dialogRef}
           aria-labelledby="category-title"
@@ -246,60 +331,81 @@ export default function CategoriesPage({
           className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-3xl border border-[#e3e7df] bg-[#fafaf7] p-6 text-[#153c32] shadow-xl backdrop:bg-[#153c32]/35 backdrop:backdrop-blur-sm sm:p-8"
           onCancel={(event) => {
             event.preventDefault();
-            if (!saving) setOpen(false);
+            if (!saving) setModal(null);
           }}
         >
           <h2
             id="category-title"
             className="text-2xl font-semibold tracking-tight"
           >
-            Nova categoria
+            {modal.action === "create"
+              ? "Nova categoria"
+              : modal.action === "rename"
+                ? "Renomear categoria"
+                : "Excluir categoria"}
           </h2>
           <p
             id="category-description"
             className="mt-2 text-sm leading-relaxed text-[#748075]"
           >
-            Escolha um nome e o tipo de movimentação.
+            {modal.action === "create" ? (
+              "Escolha um nome e o tipo de movimentação."
+            ) : modal.action === "rename" ? (
+              "Altere o nome mantendo o tipo da categoria."
+            ) : (
+              <>
+                Deseja excluir{" "}
+                <strong className="break-words">{modal.category.name}</strong>?
+                Esta ação não pode ser desfeita.
+              </>
+            )}
           </p>
           <form onSubmit={submit} className="mt-6">
             <fieldset
               disabled={saving}
               className="space-y-5 disabled:opacity-60"
             >
-              <label
-                className="block text-sm font-medium"
-                htmlFor="category-name"
-              >
-                Nome
-                <input
-                  id="category-name"
-                  name="name"
-                  required
-                  maxLength={100}
-                  autoFocus
-                  autoComplete="off"
-                  placeholder="Ex.: Alimentação"
-                  aria-invalid={fields.includes("name")}
-                  className={inputClass}
-                />
-              </label>
-              <label
-                className="block text-sm font-medium"
-                htmlFor="category-type"
-              >
-                Tipo
-                <select
-                  id="category-type"
-                  name="type"
-                  defaultValue="EXPENSE"
-                  required
-                  aria-invalid={fields.includes("type")}
-                  className={inputClass}
+              {modal.action !== "delete" && (
+                <label
+                  className="block text-sm font-medium"
+                  htmlFor="category-name"
                 >
-                  <option value="EXPENSE">Despesa</option>
-                  <option value="INCOME">Receita</option>
-                </select>
-              </label>
+                  Nome
+                  <input
+                    id="category-name"
+                    name="name"
+                    defaultValue={
+                      modal.action === "rename" ? modal.category.name : ""
+                    }
+                    required
+                    maxLength={100}
+                    autoFocus
+                    autoComplete="off"
+                    placeholder="Ex.: Alimentação"
+                    aria-invalid={fields.includes("name")}
+                    className={inputClass}
+                  />
+                </label>
+              )}
+              {modal.action === "create" && (
+                <label
+                  className="block text-sm font-medium"
+                  htmlFor="category-type"
+                >
+                  Tipo
+                  <select
+                    id="category-type"
+                    name="type"
+                    defaultValue="EXPENSE"
+                    required
+                    aria-invalid={fields.includes("type")}
+                    className={inputClass}
+                  >
+                    <option value="EXPENSE">Despesa</option>
+                    <option value="INCOME">Receita</option>
+                  </select>
+                </label>
+              )}
             </fieldset>
             {formError && (
               <p role="alert" className="mt-4 text-sm text-red-800">
@@ -310,13 +416,27 @@ export default function CategoriesPage({
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => setOpen(false)}
+                onClick={() => setModal(null)}
+                autoFocus={modal.action === "delete"}
                 className="min-h-11 cursor-pointer rounded-xl border border-[#d9e1d4] px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50"
               >
                 Cancelar
               </button>
-              <button type="submit" disabled={saving} className={buttonClass}>
-                {saving ? "Salvando…" : "Criar categoria"}
+              <button
+                type="submit"
+                disabled={saving}
+                data-danger={modal.action === "delete"}
+                className={`${buttonClass} data-[danger=true]:bg-red-800 data-[danger=true]:hover:bg-red-900 data-[danger=true]:focus-visible:outline-red-800`}
+              >
+                {saving
+                  ? modal.action === "delete"
+                    ? "Excluindo…"
+                    : "Salvando…"
+                  : modal.action === "delete"
+                    ? "Excluir categoria"
+                    : modal.action === "rename"
+                      ? "Salvar nome"
+                      : "Criar categoria"}
               </button>
             </div>
           </form>
