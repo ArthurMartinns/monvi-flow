@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AuthForm from "./features/auth/AuthForm";
 import AccountsPage from "./features/accounts/AccountsPage";
+import CategoriesPage from "./features/categories/CategoriesPage";
 import { currentUser, logout } from "./lib/auth";
 import type { User } from "./lib/auth";
 
@@ -12,7 +13,20 @@ function App() {
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [menuOpen, setMenuOpen] = useState(true);
+  const [page, setPage] = useState(() =>
+    window.location.hash === "#categorias" ? "categories" : "accounts",
+  );
   const clearSession = useCallback(() => setUser(null), []);
+
+  useEffect(() => {
+    function changePage() {
+      setPage(
+        window.location.hash === "#categorias" ? "categories" : "accounts",
+      );
+    }
+    window.addEventListener("hashchange", changePage);
+    return () => window.removeEventListener("hashchange", changePage);
+  }, []);
 
   async function signOut() {
     setSigningOut(true);
@@ -99,13 +113,13 @@ function App() {
           <nav
             id="sidebar-nav"
             aria-label="Menu principal"
-            className={`order-3 w-full lg:order-none lg:mt-10 ${menuOpen ? "" : "hidden lg:block"}`}
+            className={`order-3 w-full space-y-1 lg:order-none lg:mt-10 ${menuOpen ? "" : "hidden lg:block"}`}
           >
             <a
               href="#contas"
-              aria-current="page"
+              aria-current={page === "accounts" ? "page" : undefined}
               title="Contas"
-              className={`flex items-center gap-3 rounded-lg bg-[#eef3e6] px-3 py-3 text-sm font-medium text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${menuOpen ? "" : "justify-center"}`}
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${page === "accounts" ? "bg-[#eef3e6] text-emerald-900" : "text-stone-500 hover:bg-stone-100 hover:text-emerald-900"} ${menuOpen ? "" : "justify-center"}`}
             >
               <svg
                 className="shrink-0"
@@ -123,6 +137,29 @@ function App() {
                 <path d="M3 9h18M17 14h1" />
               </svg>
               <span className={menuOpen ? "" : "sr-only"}>Contas</span>
+            </a>
+            <a
+              href="#categorias"
+              aria-current={page === "categories" ? "page" : undefined}
+              title="Categorias"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${page === "categories" ? "bg-[#eef3e6] text-emerald-900" : "text-stone-500 hover:bg-stone-100 hover:text-emerald-900"} ${menuOpen ? "" : "justify-center"}`}
+            >
+              <svg
+                className="shrink-0"
+                aria-hidden="true"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 3h8l10 10-8 8L3 11z" />
+                <circle cx="7.5" cy="7.5" r="1" />
+              </svg>
+              <span className={menuOpen ? "" : "sr-only"}>Categorias</span>
             </a>
           </nav>
           {user && !loading && !error && (
@@ -183,6 +220,8 @@ function App() {
           </section>
         ) : !user ? (
           <AuthForm onLogin={setUser} />
+        ) : page === "categories" ? (
+          <CategoriesPage key={user.id} onSessionExpired={clearSession} />
         ) : (
           <AccountsPage key={user.id} onSessionExpired={clearSession} />
         )}
