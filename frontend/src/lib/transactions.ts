@@ -1,5 +1,5 @@
 import type { CategoryType } from "./categories.ts";
-import { post, request } from "./http.ts";
+import { post, request, send } from "./http.ts";
 
 export type Transaction = {
   id: number;
@@ -27,4 +27,12 @@ export function listTransactions(signal?: AbortSignal) {
 
 export function createTransaction(data: CreateTransaction) {
   return post<Transaction>("/api/transactions", JSON.stringify(data), "application/json");
+}
+
+export function updateTransaction(id: number, data: CreateTransaction) {
+  return send<Transaction>("PUT", `/api/transactions/${id}`, JSON.stringify(data));
+}
+
+export function deleteTransaction(id: number) {
+  return send<void>("DELETE", `/api/transactions/${id}`);
 }

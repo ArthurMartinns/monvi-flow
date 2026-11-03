@@ -60,7 +60,7 @@ export async function post<T>(
 }
 
 export async function send<T>(
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: string,
   contentType = "application/json",

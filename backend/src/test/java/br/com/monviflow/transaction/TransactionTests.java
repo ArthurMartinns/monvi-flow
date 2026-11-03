@@ -210,6 +210,126 @@ class TransactionTests extends PostgresIntegrationTest {
         assertEquals(0, transactions.count());
     }
 
+    @Test
+    void shouldUpdateAccountCategoryAndAmountAndRecalculateBothBalances() throws Exception {
+        Transaction transaction = save(expense, "25.00", "2026-01-01");
+        Account destination = accounts.save(new Account(ownerId, "Banco", new BigDecimal("100.00")));
+        mvc.perform(put("/api/transactions/{id}", transaction.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(destination.getId(), income.getId(), "50.20", "2026-01-02")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(transaction.getId()))
+                .andExpect(jsonPath("$.accountId").value(destination.getId()))
+                .andExpect(jsonPath("$.categoryId").value(income.getId()))
+                .andExpect(jsonPath("$.type").value("INCOME"))
+                .andExpect(jsonPath("$.description").value("Lancamento"))
+                .andExpect(jsonPath("$.amount").value("50.20"))
+                .andExpect(jsonPath("$.date").value("2026-01-02"));
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$[0].currentBalance").value("-125.90"))
+                .andExpect(jsonPath("$[1].currentBalance").value("150.20"));
+        mvc.perform(get("/api/transactions").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].accountName").value("Banco"))
+                .andExpect(jsonPath("$[0].amount").value("50.20"));
+    }
+
+    @Test
+    void shouldUpdateAmountInSameAccount() throws Exception {
+        Transaction transaction = save(expense, "10.00", "2026-01-01");
+        mvc.perform(put("/api/transactions/{id}", transaction.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(account.getId(), expense.getId(), "40.10", "2026-01-01")))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$[0].initialBalance").value("-125.90"))
+                .andExpect(jsonPath("$[0].currentBalance").value("-166.00"));
+    }
+
+    @Test
+    void shouldDeleteTransactionAndRestoreBalance() throws Exception {
+        Transaction transaction = save(income, "100.25", "2026-01-01");
+        mvc.perform(delete("/api/transactions/{id}", transaction.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertEquals(0, transactions.count());
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$[0].currentBalance").value("-125.90"));
+        mvc.perform(delete("/api/accounts/{id}", account.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/categories/{id}", income.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void shouldNotUpdateOrDeleteForeignOrMissingTransaction() throws Exception {
+        Transaction transaction = save(expense, "10.00", "2026-01-01");
+        for (Long id : new Long[] {transaction.getId(), Long.MAX_VALUE}) {
+            mvc.perform(put("/api/transactions/{id}", id)
+                    .with(user("maria@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body(account.getId(), income.getId(), "20.00", "2026-01-01")))
+                    .andExpect(status().isNotFound());
+            mvc.perform(delete("/api/transactions/{id}", id)
+                    .with(user("maria@example.com")).with(csrf()))
+                    .andExpect(status().isNotFound());
+        }
+        assertEquals(1, transactions.count());
+        assertEquals(new BigDecimal("10.00"), transactions.findById(transaction.getId()).orElseThrow().getAmount());
+    }
+
+    @Test
+    void shouldRejectForeignAccountAndCategoryOnUpdate() throws Exception {
+        Transaction transaction = save(expense, "10.00", "2026-01-01");
+        Long mariaId = users.findByEmail("maria@example.com").orElseThrow().getId();
+        Account foreignAccount = accounts.save(new Account(mariaId, "Outra", BigDecimal.ZERO));
+        Category foreignCategory = categories.save(new Category(mariaId, "Outra", CategoryType.EXPENSE));
+        for (String body : new String[] {
+                body(foreignAccount.getId(), expense.getId(), "20.00", "2026-01-01"),
+                body(account.getId(), foreignCategory.getId(), "20.00", "2026-01-01")}) {
+            mvc.perform(put("/api/transactions/{id}", transaction.getId())
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isNotFound());
+        }
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$[0].currentBalance").value("-135.90"));
+    }
+
+    @Test
+    void shouldRejectInvalidUpdateWithoutChangingBalance() throws Exception {
+        Transaction transaction = save(expense, "10.00", "2026-01-01");
+        String valid = body(account.getId(), expense.getId(), "20.00", "2026-01-01");
+        for (String body : new String[] {"{}", valid.replace("20.00", "0"),
+                valid.replace("20.00", "1.001"), valid.replace(" Lancamento ", " "),
+                valid.replace("2026-01-01", LocalDate.now().plusDays(1).toString())}) {
+            mvc.perform(put("/api/transactions/{id}", transaction.getId())
+                    .with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(get("/api/accounts").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$[0].currentBalance").value("-135.90"));
+    }
+
+    @Test
+    void shouldProtectUpdateAndDeleteWithSessionAndCsrf() throws Exception {
+        Transaction transaction = save(expense, "10.00", "2026-01-01");
+        mvc.perform(put("/api/transactions/{id}", transaction.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/transactions/{id}", transaction.getId()).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put("/api/transactions/{id}", transaction.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/transactions/{id}", transaction.getId()).with(user("arthur@example.com")))
+                .andExpect(status().isForbidden());
+        assertEquals(1, transactions.count());
+    }
+
     private Transaction save(Category category, String amount, String date) {
         var request = new CreateTransactionRequest(account.getId(), category.getId(),
                 "Lancamento", new BigDecimal(amount), LocalDate.parse(date));

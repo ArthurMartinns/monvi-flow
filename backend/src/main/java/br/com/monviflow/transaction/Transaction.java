@@ -18,11 +18,11 @@ public class Transaction {
     private Long userId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "account_id", nullable = false, updatable = false)
+    @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false, updatable = false)
+    @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
     @Column(nullable = false, length = 255)
@@ -39,6 +39,10 @@ public class Transaction {
 
     public Transaction(Long userId, Account account, Category category, CreateTransactionRequest request) {
         this.userId = userId;
+        update(account, category, request);
+    }
+
+    public void update(Account account, Category category, CreateTransactionRequest request) {
         this.account = account;
         this.category = category;
         this.description = request.description();

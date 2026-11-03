@@ -26,4 +26,16 @@ public class TransactionController {
     public List<TransactionResponse> list(Authentication auth) {
         return service.list(auth.getName());
     }
+
+    @PutMapping("/{id}")
+    public TransactionResponse update(Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody CreateTransactionRequest request) {
+        return service.update(auth.getName(), id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(Authentication auth, @PathVariable Long id) {
+        service.delete(auth.getName(), id);
+    }
 }

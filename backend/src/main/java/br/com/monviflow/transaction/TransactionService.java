@@ -41,6 +41,28 @@ public class TransactionService {
                 .stream().map(TransactionResponse::from).toList();
     }
 
+    @Transactional
+    public TransactionResponse update(String email, Long id, CreateTransactionRequest request) {
+        Long userId = userId(email);
+        Transaction transaction = find(id, userId);
+        var account = accounts.findByIdAndUserId(request.accountId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var category = categories.findByIdAndUserId(request.categoryId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        transaction.update(account, category, request);
+        return TransactionResponse.from(transaction);
+    }
+
+    @Transactional
+    public void delete(String email, Long id) {
+        transactions.delete(find(id, userId(email)));
+    }
+
+    private Transaction find(Long id, Long userId) {
+        return transactions.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
     private Long userId(String email) {
         return users.findByEmail(email).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED)).getId();

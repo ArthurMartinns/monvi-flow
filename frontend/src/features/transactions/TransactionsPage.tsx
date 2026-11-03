@@ -6,7 +6,7 @@ import { listCategories } from "../../lib/categories";
 import type { Category, CategoryType } from "../../lib/categories";
 import { ApiError } from "../../lib/http";
 import { formatMoney, parseBalance } from "../../lib/money";
-import { createTransaction, listTransactions } from "../../lib/transactions";
+import { createTransaction, deleteTransaction, listTransactions, updateTransaction } from "../../lib/transactions";
 import type { Transaction } from "../../lib/transactions";
 
 const buttonClass = "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#004d3c] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50";
@@ -17,6 +17,8 @@ function today() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+type Modal = { action: "create" } | { action: "edit" | "delete"; transaction: Transaction };
+
 export default function TransactionsPage({ onSessionExpired }: { onSessionExpired: () => void }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -24,7 +26,7 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState<Modal | null>(null);
   const [type, setType] = useState<CategoryType>("EXPENSE");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -32,6 +34,7 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
   const [notice, setNotice] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,21 +64,61 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!modal || !dialog) return;
     dialog.showModal();
-    const trigger = triggerRef.current;
+    const trigger = returnFocusRef.current;
+    const fallback = triggerRef.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = overflow;
       dialog.close();
-      trigger?.focus();
+      if (trigger?.isConnected) trigger.focus();
+      else fallback?.focus();
     };
-  }, [open]);
+  }, [modal]);
+
+  function openModal(next: Modal, trigger: HTMLButtonElement) {
+    returnFocusRef.current = trigger;
+    setType(next.action === "create"
+      ? categories.some((category) => category.type === "EXPENSE") ? "EXPENSE" : "INCOME"
+      : next.transaction.type);
+    setFormError("");
+    setFields([]);
+    setNotice("");
+    setModal(next);
+  }
+
+  function showFormError(error: unknown) {
+    if (error instanceof ApiError && error.status === 401) onSessionExpired();
+    else {
+      setFormError(error instanceof ApiError && error.status === 404
+        ? "A movimentação, conta ou categoria não está mais disponível. Atualize a página."
+        : error instanceof Error ? error.message : "Não foi possível concluir a operação.");
+      if (error instanceof ApiError) setFields(error.fields);
+    }
+  }
+
+  async function remove(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || modal?.action !== "delete") return;
+    setSaving(true);
+    setFormError("");
+    try {
+      await deleteTransaction(modal.transaction.id);
+      setTransactions((items) => items.filter((item) => item.id !== modal.transaction.id));
+      setModal(null);
+      setNotice("Movimentação excluída. O saldo da conta foi atualizado.");
+    } catch (error) {
+      showFormError(error);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || !modal || modal.action === "delete") return;
     const form = new FormData(event.currentTarget);
     const description = String(form.get("description") ?? "").trim();
     const date = String(form.get("date") ?? "");
@@ -104,18 +147,16 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
     }
     setSaving(true);
     try {
-      const transaction = await createTransaction({ accountId, categoryId, description, amount, date });
-      setTransactions((items) => [...items, transaction].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id));
-      setOpen(false);
-      setNotice("Movimentação registrada. O saldo da conta foi atualizado.");
+      const data = { accountId, categoryId, description, amount, date };
+      const transaction = modal.action === "edit"
+        ? await updateTransaction(modal.transaction.id, data)
+        : await createTransaction(data);
+      setTransactions((items) => [...items.filter((item) => item.id !== transaction.id), transaction]
+        .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id));
+      setModal(null);
+      setNotice(modal.action === "edit" ? "Movimentação atualizada. Os saldos foram recalculados." : "Movimentação registrada. O saldo da conta foi atualizado.");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) onSessionExpired();
-      else {
-        setFormError(error instanceof ApiError && error.status === 404
-          ? "A conta ou categoria não está mais disponível. Atualize a página."
-          : error instanceof Error ? error.message : "Não foi possível registrar a movimentação.");
-        if (error instanceof ApiError) setFields(error.fields);
-      }
+      showFormError(error);
     } finally {
       setSaving(false);
     }
@@ -123,6 +164,7 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
 
   const canCreate = !loading && !error && accounts.length > 0 && categories.length > 0;
   const availableCategories = categories.filter((category) => category.type === type);
+  const selected = modal && modal.action !== "create" ? modal.transaction : null;
 
   return (
     <section id="movimentacoes" className="mx-auto w-full max-w-[1120px] pt-11 pb-14 text-sm text-[#153c32] max-[600px]:pt-8">
@@ -132,13 +174,7 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
           <h1 className="text-[30px] leading-tight font-semibold tracking-tight">Movimentações</h1>
           <p className="mt-2 leading-relaxed text-[#748075]">Acompanhe o que entra e o que sai das suas contas.</p>
         </div>
-        <button ref={triggerRef} type="button" disabled={!canCreate} className={buttonClass} onClick={() => {
-          setType(categories.some((category) => category.type === "EXPENSE") ? "EXPENSE" : "INCOME");
-          setFormError("");
-          setFields([]);
-          setNotice("");
-          setOpen(true);
-        }}>
+        <button ref={triggerRef} type="button" disabled={!canCreate} className={buttonClass} onClick={(event) => openModal({ action: "create" }, event.currentTarget)}>
           <span aria-hidden="true" className="text-lg font-normal">+</span> Nova movimentação
         </button>
       </header>
@@ -184,6 +220,14 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
                       <p className="mt-1 text-xs text-[#748075]"><time dateTime={transaction.date}>{transaction.date.split("-").reverse().join("/")}</time> · {transaction.type === "INCOME" ? "Receita" : "Despesa"}</p>
                     </div>
                     <p className={`ml-auto max-w-full text-right text-base font-semibold break-words tabular-nums ${transaction.type === "INCOME" ? "text-[#004d3c]" : "text-[#8c5b3e]"}`}>{transaction.type === "INCOME" ? "+" : "−"} {formatMoney(transaction.amount)}</p>
+                    <div className="flex shrink-0 gap-1">
+                      <button type="button" aria-label={`Editar ${transaction.description}`} title="Editar" onClick={(event) => openModal({ action: "edit", transaction }, event.currentTarget)} className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-[#e9efe2] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#004d3c]">
+                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 5 5L9 20l-6 1 1-6L16 3ZM14 5l5 5" /></svg>
+                      </button>
+                      <button type="button" aria-label={`Excluir ${transaction.description}`} title="Excluir" onClick={(event) => openModal({ action: "delete", transaction }, event.currentTarget)} className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800">
+                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -192,15 +236,15 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
         </>
       )}
 
-      {open && (
+      {modal && (
         <dialog ref={dialogRef} aria-labelledby="transaction-title" aria-describedby="transaction-description" className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-[#e3e7df] bg-[#fafaf7] p-6 text-[#153c32] shadow-xl backdrop:bg-[#153c32]/35 backdrop:backdrop-blur-sm sm:p-8" onCancel={(event) => {
           event.preventDefault();
-          if (!saving) setOpen(false);
+          if (!saving) setModal(null);
         }}>
-          <h2 id="transaction-title" className="text-2xl font-semibold tracking-tight">Nova movimentação</h2>
-          <p id="transaction-description" className="mt-2 text-sm leading-relaxed text-[#748075]">Registre uma entrada ou saída já realizada.</p>
-          <form onSubmit={submit} className="mt-6">
-            <fieldset disabled={saving} className="space-y-5 disabled:opacity-60">
+          <h2 id="transaction-title" className="text-2xl font-semibold tracking-tight">{modal.action === "create" ? "Nova movimentação" : modal.action === "edit" ? "Editar movimentação" : "Excluir movimentação"}</h2>
+          <p id="transaction-description" className="mt-2 text-sm leading-relaxed text-[#748075]">{modal.action === "delete" ? <>Excluir <strong className="break-words">{modal.transaction.description}</strong> de {formatMoney(modal.transaction.amount)}? O saldo será recalculado. Esta ação não pode ser desfeita.</> : modal.action === "edit" ? "Altere os dados do lançamento. Os saldos serão recalculados." : "Registre uma entrada ou saída já realizada."}</p>
+          <form onSubmit={modal.action === "delete" ? remove : submit} className="mt-6">
+            {modal.action !== "delete" && <fieldset disabled={saving} className="space-y-5 disabled:opacity-60">
               <fieldset className="flex gap-3">
                 <legend className="mb-2 text-sm font-medium">Tipo</legend>
                 {(["EXPENSE", "INCOME"] as const).map((option) => (
@@ -210,34 +254,34 @@ export default function TransactionsPage({ onSessionExpired }: { onSessionExpire
                 ))}
               </fieldset>
               <label className="block text-sm font-medium" htmlFor="transaction-description-input">Descrição
-                <input id="transaction-description-input" name="description" required maxLength={255} autoFocus placeholder="Ex.: Compras do mercado" aria-invalid={fields.includes("description")} className={inputClass} />
+                <input id="transaction-description-input" name="description" defaultValue={selected?.description ?? ""} required maxLength={255} autoFocus placeholder="Ex.: Compras do mercado" aria-invalid={fields.includes("description")} className={inputClass} />
               </label>
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm font-medium" htmlFor="transaction-amount">Valor (R$)
-                  <input id="transaction-amount" name="amount" required inputMode="decimal" placeholder="0,00" autoComplete="off" aria-invalid={fields.includes("amount")} className={inputClass} />
+                  <input id="transaction-amount" name="amount" defaultValue={selected?.amount.replace(".", ",") ?? ""} required inputMode="decimal" placeholder="0,00" autoComplete="off" aria-invalid={fields.includes("amount")} className={inputClass} />
                 </label>
                 <label className="block text-sm font-medium" htmlFor="transaction-date">Data
-                  <input id="transaction-date" name="date" type="date" required defaultValue={today()} max={today()} aria-invalid={fields.includes("date")} className={`${inputClass} min-w-0`} />
+                  <input id="transaction-date" name="date" type="date" required defaultValue={selected?.date ?? today()} max={today()} aria-invalid={fields.includes("date")} className={`${inputClass} min-w-0`} />
                 </label>
               </div>
               <label className="block text-sm font-medium" htmlFor="transaction-account">Conta
-                <select id="transaction-account" name="accountId" required defaultValue="" aria-invalid={fields.includes("accountId")} className={inputClass}>
+                <select id="transaction-account" name="accountId" required defaultValue={selected?.accountId ?? ""} aria-invalid={fields.includes("accountId")} className={inputClass}>
                   <option value="" disabled>Selecione uma conta</option>
                   {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
                 </select>
               </label>
               <label className="block text-sm font-medium" htmlFor="transaction-category">Categoria
-                <select key={type} id="transaction-category" name="categoryId" required defaultValue="" aria-invalid={fields.includes("categoryId")} className={inputClass}>
+                <select key={type} id="transaction-category" name="categoryId" required defaultValue={selected?.type === type ? selected.categoryId : ""} aria-invalid={fields.includes("categoryId")} className={inputClass}>
                   <option value="" disabled>Selecione uma categoria</option>
                   {availableCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </select>
               </label>
               {availableCategories.length === 0 && <p className="text-sm text-[#8c5b3e]">Cadastre uma <a href="#categorias" className="font-semibold underline underline-offset-4">categoria de {type === "INCOME" ? "receita" : "despesa"}</a> para continuar.</p>}
-            </fieldset>
+            </fieldset>}
             {formError && <p role="alert" className="mt-4 text-sm text-red-800">{formError}</p>}
             <div className="mt-7 flex flex-wrap justify-end gap-3">
-              <button type="button" disabled={saving} onClick={() => setOpen(false)} className="min-h-11 cursor-pointer rounded-xl border border-[#d9e1d4] px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50">Cancelar</button>
-              <button type="submit" disabled={saving || availableCategories.length === 0} className={buttonClass}>{saving ? "Registrando…" : "Registrar movimentação"}</button>
+              <button type="button" disabled={saving} autoFocus={modal.action === "delete"} onClick={() => setModal(null)} className="min-h-11 cursor-pointer rounded-xl border border-[#d9e1d4] px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50">Cancelar</button>
+              <button type="submit" disabled={saving || (modal.action !== "delete" && availableCategories.length === 0)} data-danger={modal.action === "delete"} className={`${buttonClass} data-[danger=true]:bg-red-800 data-[danger=true]:hover:bg-red-900 data-[danger=true]:focus-visible:outline-red-800`}>{saving ? "Salvando…" : modal.action === "delete" ? "Excluir movimentação" : modal.action === "edit" ? "Salvar alterações" : "Registrar movimentação"}</button>
             </div>
           </form>
         </dialog>
