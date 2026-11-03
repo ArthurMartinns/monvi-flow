@@ -2,8 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import AuthForm from "./features/auth/AuthForm";
 import AccountsPage from "./features/accounts/AccountsPage";
 import CategoriesPage from "./features/categories/CategoriesPage";
+import TransactionsPage from "./features/transactions/TransactionsPage";
 import { currentUser, logout } from "./lib/auth";
 import type { User } from "./lib/auth";
+
+function pageFromHash() {
+  if (window.location.hash === "#movimentacoes") return "transactions";
+  return window.location.hash === "#categorias" ? "categories" : "accounts";
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -13,16 +19,12 @@ function App() {
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [menuOpen, setMenuOpen] = useState(true);
-  const [page, setPage] = useState(() =>
-    window.location.hash === "#categorias" ? "categories" : "accounts",
-  );
+  const [page, setPage] = useState(pageFromHash);
   const clearSession = useCallback(() => setUser(null), []);
 
   useEffect(() => {
     function changePage() {
-      setPage(
-        window.location.hash === "#categorias" ? "categories" : "accounts",
-      );
+      setPage(pageFromHash());
     }
     window.addEventListener("hashchange", changePage);
     return () => window.removeEventListener("hashchange", changePage);
@@ -161,6 +163,17 @@ function App() {
               </svg>
               <span className={menuOpen ? "" : "sr-only"}>Categorias</span>
             </a>
+            <a
+              href="#movimentacoes"
+              aria-current={page === "transactions" ? "page" : undefined}
+              title="Movimentações"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${page === "transactions" ? "bg-[#eef3e6] text-emerald-900" : "text-stone-500 hover:bg-stone-100 hover:text-emerald-900"} ${menuOpen ? "" : "justify-center"}`}
+            >
+              <svg className="shrink-0" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3v18m-4-4 4 4 4-4M17 21V3m-4 4 4-4 4 4" />
+              </svg>
+              <span className={menuOpen ? "" : "sr-only"}>Movimentações</span>
+            </a>
           </nav>
           {user && !loading && !error && (
             <button
@@ -222,6 +235,8 @@ function App() {
           <AuthForm onLogin={setUser} />
         ) : page === "categories" ? (
           <CategoriesPage key={user.id} onSessionExpired={clearSession} />
+        ) : page === "transactions" ? (
+          <TransactionsPage key={user.id} onSessionExpired={clearSession} />
         ) : (
           <AccountsPage key={user.id} onSessionExpired={clearSession} />
         )}
