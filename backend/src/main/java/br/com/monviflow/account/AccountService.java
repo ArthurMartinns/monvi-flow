@@ -28,7 +28,7 @@ public class AccountService {
     }
 
     public List<AccountResponse> list(String email) {
-        return accounts.findAllByUserIdOrderByIdAsc(userId(email))
+        return accounts.findSummaries(userId(email), null)
                 .stream().map(AccountResponse::from).toList();
     }
 
@@ -36,7 +36,8 @@ public class AccountService {
     public AccountResponse rename(String email, Long id, RenameAccountRequest request) {
         Account account = find(email, id);
         account.rename(request.name());
-        return AccountResponse.from(account);
+        accounts.flush();
+        return AccountResponse.from(accounts.findSummaries(userId(email), id).getFirst());
     }
 
     @Transactional

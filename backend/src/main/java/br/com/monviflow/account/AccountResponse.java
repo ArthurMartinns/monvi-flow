@@ -8,4 +8,10 @@ public record AccountResponse(Long id, String name, String initialBalance, Strin
         String balance = account.getInitialBalance().setScale(2, RoundingMode.UNNECESSARY).toPlainString();
         return new AccountResponse(account.getId(), account.getName(), balance, balance);
     }
+
+    public static AccountResponse from(AccountRepository.Summary account) {
+        return new AccountResponse(account.getId(), account.getName(),
+                account.getInitialBalance().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                account.getCurrentBalance().setScale(2, RoundingMode.UNNECESSARY).toPlainString());
+    }
 }
