@@ -13,6 +13,15 @@ export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const response = await requestResponse(path, options);
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+export async function requestResponse(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(path, {
@@ -47,8 +56,7 @@ export async function request<T>(
     );
   }
 
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  return response;
 }
 
 export async function post<T>(

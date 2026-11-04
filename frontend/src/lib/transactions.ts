@@ -1,5 +1,5 @@
 import type { CategoryType } from "./categories.ts";
-import { post, request, send } from "./http.ts";
+import { post, request, requestResponse, send } from "./http.ts";
 
 export type Transaction = {
   id: number;
@@ -44,20 +44,50 @@ export type TransactionPage = {
   totalPages: number;
 };
 
-export function searchTransactions(filters: TransactionFilters, signal?: AbortSignal) {
+function filterParams(filters: TransactionFilters) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value !== undefined && value !== "") params.set(key, String(value));
   }
-  return request<TransactionPage>(`/api/transactions/search?${params}`, { signal });
+  return params;
+}
+
+export function searchTransactions(
+  filters: TransactionFilters,
+  signal?: AbortSignal,
+) {
+  return request<TransactionPage>(
+    `/api/transactions/search?${filterParams(filters)}`,
+    { signal },
+  );
+}
+
+export async function exportTransactions(
+  filters: TransactionFilters,
+  signal?: AbortSignal,
+) {
+  const params = filterParams(filters);
+  params.delete("page");
+  params.delete("size");
+  return (
+    await requestResponse(`/api/transactions/export?${params}`, { signal })
+  ).blob();
 }
 
 export function createTransaction(data: CreateTransaction) {
-  return post<Transaction>("/api/transactions", JSON.stringify(data), "application/json");
+  return post<Transaction>(
+    "/api/transactions",
+    JSON.stringify(data),
+    "application/json",
+  );
 }
 
 export function updateTransaction(id: number, data: CreateTransaction) {
-  return send<Transaction>("PUT", `/api/transactions/${id}`, JSON.stringify(data));
+  return send<Transaction>(
+    "PUT",
+    `/api/transactions/${id}`,
+    JSON.stringify(data),
+  );
 }
 
 export function deleteTransaction(id: number) {

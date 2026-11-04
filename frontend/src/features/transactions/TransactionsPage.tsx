@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import RowMenu from "../../components/RowMenu";
 import type { FormEvent } from "react";
 import { listAccounts } from "../../lib/accounts";
 import type { Account } from "../../lib/accounts";
@@ -9,15 +10,16 @@ import { formatMoney, parseBalance } from "../../lib/money";
 import {
   createTransaction,
   deleteTransaction,
+  exportTransactions,
   searchTransactions,
   updateTransaction,
 } from "../../lib/transactions";
 import type { Transaction, TransactionFilters } from "../../lib/transactions";
 
 const buttonClass =
-  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#004d3c] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50";
 const inputClass =
-  "mt-2 block h-12 w-full rounded-xl border border-[#d9e1d4] bg-white px-3.5 text-sm text-[#153c32] outline-none focus:border-[#004d3c] focus:ring-3 focus:ring-[#004d3c]/5 aria-invalid:border-red-600";
+  "mt-2 block h-11 w-full rounded-xl border border-control bg-white px-3.5 text-sm text-ink outline-none focus:border-[#004d3c] focus:ring-3 focus:ring-[#004d3c]/5 aria-invalid:border-red-600";
 
 function today() {
   const date = new Date();
@@ -46,6 +48,9 @@ export default function TransactionsPage({
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
   const [filterError, setFilterError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const exportRef = useRef<AbortController | null>(null);
   const filterFormRef = useRef<HTMLFormElement>(null);
   const [modal, setModal] = useState<Modal | null>(null);
   const [type, setType] = useState<CategoryType>("EXPENSE");
@@ -55,7 +60,36 @@ export default function TransactionsPage({
   const [notice, setNotice] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => () => exportRef.current?.abort(), []);
+
+  async function downloadCsv() {
+    if (exporting) { exportRef.current?.abort(); return; }
+    const controller = new AbortController();
+    exportRef.current = controller;
+    setExporting(true);
+    setExportError("");
+    try {
+      const blob = await exportTransactions(filters, controller.signal);
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `movimentacoes-${today()}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof ApiError && error.status === 401) onSessionExpired();
+      else setExportError(error instanceof Error ? error.message : "Não foi possível exportar as movimentações.");
+    } finally {
+      exportRef.current = null;
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -150,7 +184,7 @@ export default function TransactionsPage({
     };
   }, [modal]);
 
-  function openModal(next: Modal, trigger: HTMLButtonElement) {
+  function openModal(next: Modal, trigger: HTMLElement) {
     returnFocusRef.current = trigger;
     setType(
       next.action === "create"
@@ -265,20 +299,19 @@ export default function TransactionsPage({
   return (
     <section
       id="movimentacoes"
-      className="mx-auto w-full max-w-[1120px] pt-11 pb-14 text-sm text-[#153c32] max-[600px]:pt-8"
+      className="mx-auto w-full max-w-[1120px] pt-8 pb-10 text-sm text-ink max-[600px]:pt-6"
     >
       <header className="flex flex-wrap items-center justify-between gap-5">
         <div>
-          <p className="mb-2 text-xs font-medium tracking-wider text-[#8c5b3e] uppercase">
-            Seu dinheiro em movimento
-          </p>
-          <h1 className="text-[30px] leading-tight font-semibold tracking-tight">
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight">
             Movimentações
           </h1>
-          <p className="mt-2 leading-relaxed text-[#748075]">
+          <p className="mt-2 leading-relaxed text-muted">
             Acompanhe o que entra e o que sai das suas contas.
           </p>
         </div>
+        <div className="flex flex-wrap gap-3">
+        <button type="button" disabled={!exporting && (loading || !!error || total === 0)} onClick={downloadCsv} className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-control bg-white px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50">{exporting ? "Cancelar exportação" : "Exportar CSV"}</button>
         <button
           ref={triggerRef}
           type="button"
@@ -293,20 +326,32 @@ export default function TransactionsPage({
           </span>{" "}
           Nova movimentação
         </button>
+        </div>
       </header>
 
-      <p role="status" className="mt-5 text-[#004d3c]">
+      <p role="status" className={notice ? "mt-4 text-accent" : "sr-only"}>
         {notice}
       </p>
+      {exportError && <p role="alert" className="mt-3 text-sm text-red-800">{exportError}</p>}
+      {exporting && <p role="status" className="mt-3 text-sm text-muted">Preparando todos os resultados dos filtros aplicados…</p>}
 
+      <details className="mt-5 rounded-lg border border-line bg-white">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-lg px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+        <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" /></svg>
+        Filtros
+        <span className="ml-auto text-xs font-normal text-muted">{(() => {
+          const count = Object.entries(filters).filter(([key, value]) => key !== "page" && key !== "size" && value !== "" && value !== undefined).length;
+          return count ? `${count} ${count === 1 ? "aplicado" : "aplicados"}` : "Nenhum filtro aplicado";
+        })()}</span>
+      </summary>
       <form
         ref={filterFormRef}
         onSubmit={applyFilters}
         aria-label="Filtrar movimentações"
-        className="mt-5 rounded-2xl border border-[#e3e7df] bg-white p-5"
+        className="border-t border-line p-4"
       >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             Buscar descrição
             <input
               name="query"
@@ -316,7 +361,7 @@ export default function TransactionsPage({
               className={inputClass}
             />
           </label>
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             De
             <input
               name="from"
@@ -324,11 +369,11 @@ export default function TransactionsPage({
               className={`${inputClass} min-w-0`}
             />
           </label>
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             Até
             <input name="to" type="date" className={`${inputClass} min-w-0`} />
           </label>
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             Conta
             <select name="filterAccount" defaultValue="" className={inputClass}>
               <option value="">Todas as contas</option>
@@ -339,7 +384,7 @@ export default function TransactionsPage({
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             Tipo
             <select name="filterType" defaultValue="" className={inputClass}>
               <option value="">Receitas e despesas</option>
@@ -347,7 +392,7 @@ export default function TransactionsPage({
               <option value="EXPENSE">Despesa</option>
             </select>
           </label>
-          <label className="text-xs font-medium text-[#63766a]">
+          <label className="text-xs font-medium text-muted">
             Categoria
             <select
               name="filterCategory"
@@ -371,7 +416,7 @@ export default function TransactionsPage({
               setFilterError("");
               changeFilters({ page: 0, size: 20 });
             }}
-            className="cursor-pointer rounded-xl px-4 py-2 text-sm font-medium text-[#63766a] hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-[#004d3c]"
+            className="cursor-pointer rounded-xl px-4 py-2 text-sm font-medium text-muted hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-[#004d3c]"
           >
             Limpar filtros
           </button>
@@ -385,13 +430,14 @@ export default function TransactionsPage({
           </p>
         )}
       </form>
+      </details>
 
       {loading ? (
-        <p role="status" className="py-12 text-[#748075]">
+        <p role="status" className="py-12 text-muted">
           Carregando movimentações…
         </p>
       ) : error ? (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-white p-6">
+        <div className="mt-6 rounded-lg border border-red-200 bg-white p-6">
           <p role="alert" className="text-red-800">
             {error}
           </p>
@@ -410,7 +456,7 @@ export default function TransactionsPage({
       ) : (
         <>
           {!canCreate && (
-            <p className="mt-5 rounded-2xl bg-[#f2e9d8] p-5 leading-relaxed text-[#705139]">
+            <p className="mt-5 rounded-lg bg-[#f1f3ee] p-5 leading-relaxed text-[#705139]">
               Para registrar movimentações, cadastre uma{" "}
               <a
                 href="#contas"
@@ -429,20 +475,20 @@ export default function TransactionsPage({
             </p>
           )}
           {transactions.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-[#d9e1d4] bg-white px-6 py-14 text-center">
+            <div className="mt-5 rounded-lg border border-dashed border-control bg-white px-6 py-14 text-center">
               <h2 className="text-lg font-semibold">
                 Nenhuma movimentação encontrada
               </h2>
-              <p className="mt-2 text-[#748075]">
+              <p className="mt-2 text-muted">
                 Registre um lançamento ou ajuste os filtros para consultar outro
                 período.
               </p>
             </div>
           ) : (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-[#e3e7df] bg-white">
-              <div className="flex items-center justify-between gap-3 bg-[#e9efe2] px-5 py-4">
+            <div className="mt-5 rounded-lg border border-line bg-white">
+              <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
                 <h2 className="text-base font-semibold">Histórico</h2>
-                <span className="text-xs text-[#63766a]">
+                <span className="text-xs text-muted">
                   {total}{" "}
                   {total === 1
                     ? "registro encontrado"
@@ -453,11 +499,11 @@ export default function TransactionsPage({
                 {transactions.map((transaction) => (
                   <li
                     key={transaction.id}
-                    className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-5 transition-colors hover:bg-[#fafaf7] motion-reduce:transition-none"
+                    className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-3 px-4 py-4 sm:grid-cols-[28px_minmax(0,1fr)_auto_36px] sm:px-5 transition-colors hover:bg-canvas motion-reduce:transition-none"
                   >
                     <span
                       aria-hidden="true"
-                      className={`grid size-10 shrink-0 place-items-center rounded-xl ${transaction.type === "INCOME" ? "bg-[#e9efe2] text-[#004d3c]" : "bg-[#f2e9d8] text-[#8c5b3e]"}`}
+                      className="hidden size-7 shrink-0 place-items-center text-muted sm:grid"
                     >
                       <svg
                         width="18"
@@ -477,14 +523,14 @@ export default function TransactionsPage({
                         <path d="M6 18 18 6M6 6h12v12" />
                       </svg>
                     </span>
-                    <div className="min-w-0 flex-1 basis-36">
+                    <div className="min-w-0">
                       <p className="font-medium break-words">
                         {transaction.description}
                       </p>
-                      <p className="mt-1 text-xs leading-relaxed break-words text-[#748075]">
+                      <p className="mt-1 text-[13px] leading-relaxed break-words text-muted">
                         {transaction.categoryName} · {transaction.accountName}
                       </p>
-                      <p className="mt-1 text-xs text-[#748075]">
+                      <p className="mt-1 text-xs text-muted">
                         <time dateTime={transaction.date}>
                           {transaction.date.split("-").reverse().join("/")}
                         </time>{" "}
@@ -493,72 +539,22 @@ export default function TransactionsPage({
                       </p>
                     </div>
                     <p
-                      className={`ml-auto max-w-full text-right text-base font-semibold break-words tabular-nums ${transaction.type === "INCOME" ? "text-[#004d3c]" : "text-[#8c5b3e]"}`}
+                      className={`ml-auto max-w-full text-right text-base font-semibold break-words tabular-nums ${transaction.type === "INCOME" ? "text-accent" : "text-ink"}`}
                     >
                       {transaction.type === "INCOME" ? "+" : "−"}{" "}
                       {formatMoney(transaction.amount)}
                     </p>
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        type="button"
-                        aria-label={`Editar ${transaction.description}`}
-                        title="Editar"
-                        onClick={(event) =>
-                          openModal(
-                            { action: "edit", transaction },
-                            event.currentTarget,
-                          )
-                        }
-                        className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-[#e9efe2] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#004d3c]"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="m16 3 5 5L9 20l-6 1 1-6L16 3ZM14 5l5 5" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Excluir ${transaction.description}`}
-                        title="Excluir"
-                        onClick={(event) =>
-                          openModal(
-                            { action: "delete", transaction },
-                            event.currentTarget,
-                          )
-                        }
-                        className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
-                        </svg>
-                      </button>
-                    </div>
+                    <RowMenu name={transaction.description} actions={[
+                      { label: "Editar", onSelect: (trigger) => openModal({ action: "edit", transaction }, trigger) },
+                      { label: "Excluir", danger: true, onSelect: (trigger) => openModal({ action: "delete", transaction }, trigger) },
+                    ]} />
                   </li>
                 ))}
               </ul>
               {pages > 1 && (
                 <nav
                   aria-label="Páginas de movimentações"
-                  className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf0e9] px-5 py-4 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4 text-sm"
                 >
                   <button
                     type="button"
@@ -566,11 +562,11 @@ export default function TransactionsPage({
                     onClick={() =>
                       changeFilters({ ...filters, page: filters.page - 1 })
                     }
-                    className="cursor-pointer rounded-lg border border-[#d9e1d4] px-3 py-2 hover:bg-[#e9efe2] disabled:cursor-default disabled:opacity-40"
+                    className="cursor-pointer rounded-lg border border-control px-3 py-2 hover:bg-[#e9efe2] disabled:cursor-default disabled:opacity-40"
                   >
                     Anterior
                   </button>
-                  <span className="text-[#748075]">
+                  <span className="text-muted">
                     Página {filters.page + 1} de {pages}
                   </span>
                   <button
@@ -579,7 +575,7 @@ export default function TransactionsPage({
                     onClick={() =>
                       changeFilters({ ...filters, page: filters.page + 1 })
                     }
-                    className="cursor-pointer rounded-lg border border-[#d9e1d4] px-3 py-2 hover:bg-[#e9efe2] disabled:cursor-default disabled:opacity-40"
+                    className="cursor-pointer rounded-lg border border-control px-3 py-2 hover:bg-[#e9efe2] disabled:cursor-default disabled:opacity-40"
                   >
                     Próxima
                   </button>
@@ -595,7 +591,7 @@ export default function TransactionsPage({
           ref={dialogRef}
           aria-labelledby="transaction-title"
           aria-describedby="transaction-description"
-          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-[#e3e7df] bg-[#fafaf7] p-6 text-[#153c32] shadow-xl backdrop:bg-[#153c32]/35 backdrop:backdrop-blur-sm sm:p-8"
+          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-xl border border-line bg-canvas p-6 text-ink shadow-xl backdrop:bg-[#153c32]/35  sm:p-8"
           onCancel={(event) => {
             event.preventDefault();
             if (!saving) setModal(null);
@@ -613,7 +609,7 @@ export default function TransactionsPage({
           </h2>
           <p
             id="transaction-description"
-            className="mt-2 text-sm leading-relaxed text-[#748075]"
+            className="mt-2 text-sm leading-relaxed text-muted"
           >
             {modal.action === "delete" ? (
               <>
@@ -644,7 +640,7 @@ export default function TransactionsPage({
                   {(["EXPENSE", "INCOME"] as const).map((option) => (
                     <label
                       key={option}
-                      className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium has-focus-visible:ring-2 has-focus-visible:ring-[#004d3c] ${type === option ? "border-[#004d3c] bg-[#e9efe2]" : "border-[#d9e1d4] bg-white"}`}
+                      className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium has-focus-visible:ring-2 has-focus-visible:ring-[#004d3c] ${type === option ? "border-[#004d3c] bg-[#e9efe2]" : "border-control bg-white"}`}
                     >
                       <input
                         type="radio"
@@ -784,7 +780,7 @@ export default function TransactionsPage({
                 disabled={saving}
                 autoFocus={modal.action === "delete"}
                 onClick={() => setModal(null)}
-                className="min-h-11 cursor-pointer rounded-xl border border-[#d9e1d4] px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50"
+                className="min-h-11 cursor-pointer rounded-xl border border-control px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50"
               >
                 Cancelar
               </button>
