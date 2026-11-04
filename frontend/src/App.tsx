@@ -3,12 +3,14 @@ import AuthForm from "./features/auth/AuthForm";
 import AccountsPage from "./features/accounts/AccountsPage";
 import CategoriesPage from "./features/categories/CategoriesPage";
 import TransactionsPage from "./features/transactions/TransactionsPage";
+import OverviewPage from "./features/overview/OverviewPage";
 import { currentUser, logout } from "./lib/auth";
 import type { User } from "./lib/auth";
 
 function pageFromHash() {
   if (window.location.hash === "#movimentacoes") return "transactions";
-  return window.location.hash === "#categorias" ? "categories" : "accounts";
+  if (window.location.hash === "#categorias") return "categories";
+  return window.location.hash === "#contas" ? "accounts" : "overview";
 }
 
 function App() {
@@ -118,6 +120,28 @@ function App() {
             className={`order-3 w-full space-y-1 lg:order-none lg:mt-10 ${menuOpen ? "" : "hidden lg:block"}`}
           >
             <a
+              href="#inicio"
+              aria-current={page === "overview" ? "page" : undefined}
+              title="Visão geral"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${page === "overview" ? "bg-[#eef3e6] text-emerald-900" : "text-stone-500 hover:bg-stone-100 hover:text-emerald-900"} ${menuOpen ? "" : "justify-center"}`}
+            >
+              <svg
+                className="shrink-0"
+                aria-hidden="true"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m3 10 9-7 9 7v11H3V10ZM9 21v-8h6v8" />
+              </svg>
+              <span className={menuOpen ? "" : "sr-only"}>Visão geral</span>
+            </a>
+            <a
               href="#contas"
               aria-current={page === "accounts" ? "page" : undefined}
               title="Contas"
@@ -169,7 +193,18 @@ function App() {
               title="Movimentações"
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 ${page === "transactions" ? "bg-[#eef3e6] text-emerald-900" : "text-stone-500 hover:bg-stone-100 hover:text-emerald-900"} ${menuOpen ? "" : "justify-center"}`}
             >
-              <svg className="shrink-0" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="shrink-0"
+                aria-hidden="true"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M7 3v18m-4-4 4 4 4-4M17 21V3m-4 4 4-4 4 4" />
               </svg>
               <span className={menuOpen ? "" : "sr-only"}>Movimentações</span>
@@ -237,6 +272,8 @@ function App() {
           <CategoriesPage key={user.id} onSessionExpired={clearSession} />
         ) : page === "transactions" ? (
           <TransactionsPage key={user.id} onSessionExpired={clearSession} />
+        ) : page === "overview" ? (
+          <OverviewPage key={user.id} onSessionExpired={clearSession} />
         ) : (
           <AccountsPage key={user.id} onSessionExpired={clearSession} />
         )}
