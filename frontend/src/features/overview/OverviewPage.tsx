@@ -4,6 +4,8 @@ import { formatMoney } from "../../lib/money";
 import { getOverview } from "../../lib/overview";
 import type { Overview } from "../../lib/overview";
 import { cents, monthDays, percentage } from "./chartData";
+import DailyChart from "./DailyChart";
+import { budgetProgress } from "../budgets/budgetProgress";
 
 const currentMonth = () => {
   const date = new Date();
@@ -60,314 +62,59 @@ export default function OverviewPage({
           },
       )
     : [];
-  const max = days.reduce(
-    (max, day) =>
-      [max, cents(day.income), cents(day.expense)].reduce((a, b) =>
-        a > b ? a : b,
-      ),
-    0n,
-  );
   const monthLabel = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
   }).format(new Date(`${month}-15T12:00:00`));
+  const budgetAlerts = (data?.budgets ?? []).filter(
+    (budget) => budgetProgress(budget).status !== "under",
+  );
 
+  const overBudget = budgetAlerts.filter((budget) => budgetProgress(budget).status === "over");
+  const priorityBudgets = [...budgetAlerts].sort((a, b) => Number(budgetProgress(b).status === "over") - Number(budgetProgress(a).status === "over"));
+  const stats = data ? [
+    { label: "Saldo atual", value: data.totalBalance, note: `${data.accountCount} contas · saldo acumulado`, main: false },
+    { label: "Receitas do mês", value: data.income, note: monthLabel, main: false },
+    { label: "Despesas do mês", value: data.expense, note: monthLabel, main: false },
+    { label: "Resultado do mês", value: data.result, note: "Receitas menos despesas", main: true },
+  ] : [];
   return (
-    <section className="mx-auto max-w-[1120px] pt-11 pb-14 text-sm text-[#153c32] max-[600px]:pt-8">
-      <header className="flex flex-wrap items-center justify-between gap-5">
-        <div>
-          <p className="mb-2 text-xs font-medium tracking-wider text-[#8c5b3e] uppercase">
-            Um olhar sobre suas finanças
-          </p>
-          <h1 className="text-[30px] leading-tight font-semibold tracking-tight">
-            Visão geral
-          </h1>
-          <p className="mt-2 text-[#748075]">
-            Mais clareza para acompanhar seu mês.
-          </p>
-        </div>
-        <label className="text-xs font-medium text-[#63766a]">
-          Período
-          <input
-            type="month"
-            min="0001-01"
-            max="9999-12"
-            required
-            value={month}
-            onChange={(event) => {
-              if (
-                !/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) ||
-                event.target.value.startsWith("0000")
-              )
-                return;
-              setLoading(true);
-              setError("");
-              setMonth(event.target.value);
-            }}
-            className="mt-2 block h-11 rounded-xl border border-[#d9e1d4] bg-white px-3 text-sm text-[#153c32] outline-none focus:border-[#004d3c]"
-          />
-        </label>
+    <section className="mx-auto w-full max-w-[1200px] pt-8 pb-10 text-sm text-ink max-[600px]:pt-6">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div><h1 className="text-2xl font-semibold tracking-tight">Visão geral</h1><p className="mt-2 text-muted">Seu resultado financeiro, mês a mês.</p></div>
+        <label className="text-xs font-medium text-muted">Período<input type="month" min="0001-01" max="9999-12" required value={month} onChange={(event) => {
+          if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) || event.target.value.startsWith("0000")) return;
+          setLoading(true); setError(""); setMonth(event.target.value);
+        }} className="mt-2 block h-11 rounded-lg border border-control bg-white px-3 text-sm text-ink outline-none focus:border-accent" /></label>
       </header>
-
-      {loading ? (
-        <p role="status" className="py-14 text-[#748075]">
-          Preparando seu resumo…
-        </p>
-      ) : error ? (
-        <div className="mt-8 rounded-2xl border border-red-200 bg-white p-6">
-          <p role="alert" className="text-red-800">
-            {error}
-          </p>
-          <button
-            type="button"
-            onClick={reload}
-            className="mt-4 cursor-pointer rounded-xl bg-[#004d3c] px-5 py-3 font-semibold text-white"
-          >
-            Tentar novamente
-          </button>
+      {loading ? <p role="status" className="py-14 text-muted">Preparando seu resumo…</p> : error ? (
+        <div className="mt-6 rounded-lg border border-line bg-white p-6"><p role="alert" className="text-danger">{error}</p><button type="button" onClick={reload} className="mt-4 min-h-11 cursor-pointer rounded-lg bg-ink px-5 py-2 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Tentar novamente</button></div>
+      ) : data && <div className="mt-6 space-y-5">
+        <section aria-label="Resumo financeiro" className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-white lg:grid-cols-4">
+          {stats.map((stat, index) => <div key={stat.label} className={`min-w-0 p-4 sm:p-5 ${index % 2 === 1 ? "border-l border-line" : ""} ${index > 1 ? "border-t border-line lg:border-t-0 lg:border-l" : ""}`}>
+            <p className="text-[13px] text-muted">{stat.label}</p><p className={`mt-2 leading-tight font-semibold tracking-tight break-words tabular-nums ${stat.main ? "text-[28px]" : "text-[23px]"} ${stat.value.startsWith("-") ? "text-danger" : "text-ink"}`}>{formatMoney(stat.value)}</p><p className="mt-2 text-xs text-muted">{stat.note}</p>
+          </div>)}
+        </section>
+        <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+          <figure className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
+            <figcaption className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold">Movimento diário</h2><p className="mt-1 text-xs text-muted">{data.transactionCount} movimentações em {monthLabel}</p></div><div className="flex gap-3 text-xs text-muted"><span><span aria-hidden="true" className="mr-1.5 inline-block h-2 w-2 bg-accent" />Receitas</span><span><span aria-hidden="true" className="mr-1.5 inline-block h-2 w-2 bg-[#aab7ae]" />Despesas</span></div></figcaption>
+            <div className="mt-5"><DailyChart days={days} /></div>
+          </figure>
+          <section className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
+            <h2 className="text-base font-semibold">Despesas por categoria</h2><p className="mt-1 text-xs text-muted">Do maior gasto para o menor</p>
+            {data.categories.length === 0 ? <p className="py-10 text-muted">Nenhuma despesa registrada neste mês.</p> : <ul className="mt-5 space-y-4">{data.categories.slice(0, 5).map((category, index) => <li key={category.id}>
+              <div className="flex items-baseline justify-between gap-4"><span className="min-w-0 truncate text-sm" title={category.name}>{category.name}</span><span className="shrink-0 text-sm font-medium text-ink tabular-nums">{formatMoney(category.amount)}</span></div><div aria-hidden="true" className="mt-2 h-0.5 bg-[#f0f3ef]"><div style={{ width: `${percentage(cents(category.amount), cents(data.expense))}%` }} className={`h-full ${index === 0 ? "bg-accent" : "bg-[#aab7ae]"}`} /></div>
+            </li>)}</ul>}
+            {data.categories.length > 5 && <p className="mt-4 text-xs text-muted">Mais {data.categories.length - 5} categorias · <a href="#movimentacoes" className="font-medium text-ink underline underline-offset-4">Consultar histórico</a></p>}
+          </section>
         </div>
-      ) : (
-        data && (
-          <div className="mt-8 space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-5 rounded-3xl bg-[#004d3c] px-6 py-7 text-white sm:px-8">
-              <div className="min-w-0">
-                <p className="text-sm text-[#d7e3ce]">
-                  Saldo atual · todas as contas
-                </p>
-                <p className="mt-2 text-[32px] leading-tight font-semibold tracking-tight break-words tabular-nums">
-                  {formatMoney(data.totalBalance)}
-                </p>
-                <p className="mt-2 text-xs text-[#d7e3ce]">
-                  {data.accountCount}{" "}
-                  {data.accountCount === 1
-                    ? "conta cadastrada"
-                    : "contas cadastradas"}{" "}
-                  · inclui movimentações de todos os períodos
-                </p>
-              </div>
-              <a
-                href="#contas"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/25 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-              >
-                Ver contas
-                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9 5 7 7-7 7" />
-                </svg>
-              </a>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[
-                {
-                  label: "Receitas do mês",
-                  value: data.income,
-                  tone: "text-[#004d3c]",
-                  icon: "income",
-                },
-                {
-                  label: "Despesas do mês",
-                  value: data.expense,
-                  tone: "text-[#8c5b3e]",
-                  icon: "expense",
-                },
-                {
-                  label: "Resultado do mês",
-                  value: data.result,
-                  tone: data.result.startsWith("-")
-                    ? "text-[#8c5b3e]"
-                    : "text-[#004d3c]",
-                  icon: "result",
-                },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="min-w-0 rounded-2xl border border-[#e3e7df] bg-white p-5"
-                >
-                  <div className="flex items-center justify-between gap-2 text-[#748075]">
-                    <p>{stat.label}</p>
-                    <svg
-                      aria-hidden="true"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className={`${stat.tone} shrink-0 ${stat.icon === "expense" ? "rotate-90" : ""}`}
-                    >
-                      <path
-                        d={
-                          stat.icon === "result"
-                            ? "M5 8h14M5 16h14"
-                            : "M6 18 18 6M6 6h12v12"
-                        }
-                      />
-                    </svg>
-                  </div>
-                  <p
-                    className={`mt-3 text-2xl font-semibold tracking-tight break-words tabular-nums ${stat.tone}`}
-                  >
-                    {formatMoney(stat.value)}
-                  </p>
-                  <p className="mt-2 text-xs text-[#748075]">
-                    {stat.label === "Resultado do mês"
-                      ? "Receitas menos despesas"
-                      : monthLabel}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {data.transactionCount === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#d9e1d4] bg-white p-8 text-center">
-                <h2 className="text-lg font-semibold">
-                  Um mês ainda em branco
-                </h2>
-                <p className="mt-2 text-[#748075]">
-                  Nenhuma movimentação registrada em {monthLabel}.
-                </p>
-                <a
-                  href="#movimentacoes"
-                  className="mt-5 inline-flex rounded-xl bg-[#004d3c] px-5 py-3 font-semibold text-white"
-                >
-                  Ir para movimentações
-                </a>
-              </div>
-            ) : (
-              <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
-                <figure className="relative min-w-0 rounded-2xl border border-[#e3e7df] bg-white p-5 sm:p-6">
-                  <figcaption className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold">
-                        Entradas e saídas
-                      </h2>
-                      <p className="mt-1 text-xs text-[#748075]">
-                        {data.transactionCount}{" "}
-                        {data.transactionCount === 1
-                          ? "movimentação no mês"
-                          : "movimentações no mês"}
-                      </p>
-                    </div>
-                    <div className="flex gap-3 text-xs text-[#748075]">
-                      <span>
-                        <span
-                          aria-hidden="true"
-                          className="mr-1.5 inline-block size-2 rounded-full bg-[#004d3c]"
-                        />
-                        Receitas
-                      </span>
-                      <span>
-                        <span
-                          aria-hidden="true"
-                          className="mr-1.5 inline-block size-2 rounded-full bg-[#b48b65]"
-                        />
-                        Despesas
-                      </span>
-                    </div>
-                  </figcaption>
-                  <div
-                    aria-hidden="true"
-                    className="mt-8 flex h-44 items-end gap-1 border-b border-[#e3e7df]"
-                  >
-                    {days.map((day) => (
-                      <div
-                        key={day.date}
-                        title={`${day.date.split("-").reverse().join("/")} · Receitas ${formatMoney(day.income)} · Despesas ${formatMoney(day.expense)}`}
-                        className="flex h-full min-w-0 flex-1 items-end gap-px"
-                      >
-                        <span
-                          style={{
-                            height: `${percentage(cents(day.income), max)}%`,
-                          }}
-                          className="min-w-0 flex-1 rounded-t-sm bg-[#004d3c]"
-                        />
-                        <span
-                          style={{
-                            height: `${percentage(cents(day.expense), max)}%`,
-                          }}
-                          className="min-w-0 flex-1 rounded-t-sm bg-[#b48b65]"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    aria-hidden="true"
-                    className="mt-2 flex justify-between text-[10px] text-[#748075]"
-                  >
-                    <span>01</span>
-                    <span>08</span>
-                    <span>15</span>
-                    <span>22</span>
-                    <span>{days.length}</span>
-                  </div>
-                  <div className="sr-only">
-                    <table>
-                      <caption>Movimentações diárias de {monthLabel}</caption>
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Receitas</th>
-                          <th>Despesas</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {days.map((day) => (
-                          <tr key={day.date}>
-                            <td>{day.date.split("-").reverse().join("/")}</td>
-                            <td>{formatMoney(day.income)}</td>
-                            <td>{formatMoney(day.expense)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </figure>
-                <section className="min-w-0 rounded-2xl border border-[#e3e7df] bg-white p-5 sm:p-6">
-                  <h2 className="text-base font-semibold">
-                    Para onde foi seu dinheiro
-                  </h2>
-                  <p className="mt-1 text-xs text-[#748075]">
-                    Despesas por categoria em {monthLabel}
-                  </p>
-                  {data.categories.length === 0 ? (
-                    <p className="py-10 text-[#748075]">
-                      Nenhuma despesa neste mês.
-                    </p>
-                  ) : (
-                    <ul className="mt-6 max-h-64 space-y-5 overflow-y-auto pr-1">
-                      {data.categories.map((category) => (
-                        <li key={category.id}>
-                          <div className="flex flex-wrap justify-between gap-2">
-                            <span className="min-w-0 font-medium break-words">
-                              {category.name}
-                            </span>
-                            <span className="text-[#8c5b3e] tabular-nums">
-                              {formatMoney(category.amount)}
-                            </span>
-                          </div>
-                          <div
-                            aria-hidden="true"
-                            className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f2e9d8]"
-                          >
-                            <div
-                              style={{
-                                width: `${percentage(cents(category.amount), cents(data.expense))}%`,
-                              }}
-                              className="h-full rounded-full bg-[#b48b65]"
-                            />
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              </div>
-            )}
-          </div>
-        )
-      )}
+        <section className="rounded-lg border border-line bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold">Limites do mês</h2><p className="mt-1 text-[13px] text-muted">{overBudget.length > 0 ? `${overBudget.length} ${overBudget.length === 1 ? "categoria ultrapassou" : "categorias ultrapassaram"} o limite planejado.` : budgetAlerts.length > 0 ? "Algumas categorias estão próximas do limite planejado." : "Acompanhe seus limites por categoria."}</p></div><a href="#orcamentos" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent">Ver orçamentos<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 5 7 7-7 7" /></svg></a></div>
+          {priorityBudgets.length === 0 ? <p className="mt-4 text-sm text-muted">{data.budgets?.length ? "Os orçamentos estão abaixo de 80% do limite." : "Nenhum limite definido para este mês."}</p> : <ul className="mt-2 divide-y divide-line">{priorityBudgets.slice(0, 3).map((budget) => <li key={budget.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5"><span className="min-w-0 text-sm font-medium sm:flex sm:items-center sm:gap-3">{budget.categoryName}<span className={`mt-1 block text-xs font-normal sm:mt-0 ${budgetProgress(budget).status === "over" ? "text-danger" : "text-muted"}`}>{budgetProgress(budget).label}</span></span><span className="text-right text-sm tabular-nums">{formatMoney(budget.spent)} <span className="text-xs text-muted">de {formatMoney(budget.limitAmount)}</span></span></li>)}</ul>}
+          {priorityBudgets.length > 3 && <p className="mt-2 text-xs text-muted">Mais {priorityBudgets.length - 3} categorias precisam de atenção.</p>}
+        </section>
+        <div className="flex flex-wrap justify-between gap-3 text-sm"><a href="#contas" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 font-medium text-ink focus-visible:outline-2 focus-visible:outline-accent">Ver contas<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 5 7 7-7 7" /></svg></a><a href="#movimentacoes" className="inline-flex min-h-11 items-center rounded-lg bg-ink px-4 font-medium text-white transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Ver movimentações</a></div>
+      </div>}
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { request } from "./http.ts";
+import type { Budget } from "./budgets.ts";
 
 export type Overview = {
   month: string;
@@ -10,8 +11,11 @@ export type Overview = {
   transactionCount: number;
   days: { date: string; income: string; expense: string }[];
   categories: { id: number; name: string; amount: string }[];
+  budgets: Budget[];
 };
 
 export function getOverview(month: string, signal?: AbortSignal) {
-  return request<Overview>(`/api/overview?${new URLSearchParams({ month })}`, { signal });
+  return request<Overview>(`/api/overview?${new URLSearchParams({ month })}`, {
+    signal,
+  });
 }
