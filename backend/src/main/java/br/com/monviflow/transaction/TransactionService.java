@@ -47,15 +47,31 @@ public class TransactionService {
     }
 
     public TransactionPage search(String email, TransactionFilter filter) {
-        Long userId = userId(email);
-        Specification<Transaction> specification = (root, query, builder) -> {
+        return TransactionPage.from(transactions.findAll(specification(userId(email), filter),
+                PageRequest.of(filter.page(), filter.size(), Sort.by(Sort.Direction.DESC, "date", "id"))));
+    }
+
+    public String export(String email, TransactionFilter filter) {
+        var rows = transactions
+                .findAll(specification(userId(email), filter), Sort.by(Sort.Direction.DESC, "date", "id"))
+                .stream().map(TransactionResponse::from).toList();
+        return TransactionCsv.write(rows);
+    }
+
+    private Specification<Transaction> specification(Long userId, TransactionFilter filter) {
+        return (root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
             predicates.add(builder.equal(root.get("userId"), userId));
-            if (filter.from() != null) predicates.add(builder.greaterThanOrEqualTo(root.get("date"), filter.from()));
-            if (filter.to() != null) predicates.add(builder.lessThanOrEqualTo(root.get("date"), filter.to()));
-            if (filter.accountId() != null) predicates.add(builder.equal(root.get("account").get("id"), filter.accountId()));
-            if (filter.categoryId() != null) predicates.add(builder.equal(root.get("category").get("id"), filter.categoryId()));
-            if (filter.type() != null) predicates.add(builder.equal(root.get("category").get("type"), filter.type()));
+            if (filter.from() != null)
+                predicates.add(builder.greaterThanOrEqualTo(root.get("date"), filter.from()));
+            if (filter.to() != null)
+                predicates.add(builder.lessThanOrEqualTo(root.get("date"), filter.to()));
+            if (filter.accountId() != null)
+                predicates.add(builder.equal(root.get("account").get("id"), filter.accountId()));
+            if (filter.categoryId() != null)
+                predicates.add(builder.equal(root.get("category").get("id"), filter.categoryId()));
+            if (filter.type() != null)
+                predicates.add(builder.equal(root.get("category").get("type"), filter.type()));
             if (filter.query() != null && !filter.query().isBlank()) {
                 String escaped = filter.query().toLowerCase(java.util.Locale.ROOT)
                         .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
@@ -63,8 +79,6 @@ public class TransactionService {
             }
             return builder.and(predicates.toArray(Predicate[]::new));
         };
-        return TransactionPage.from(transactions.findAll(specification, PageRequest.of(filter.page(), filter.size(),
-                Sort.by(Sort.Direction.DESC, "date", "id"))));
     }
 
     @Transactional

@@ -4,23 +4,30 @@ import java.util.List;
 import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.Query;
 
+@NullMarked
 public interface TransactionRepository extends JpaRepository<Transaction, Long>, JpaSpecificationExecutor<Transaction> {
-    @EntityGraph(attributePaths = {"account", "category"})
+    @EntityGraph(attributePaths = { "account", "category" })
     List<Transaction> findAllByUserIdOrderByDateDescIdDesc(Long userId);
 
     Optional<Transaction> findByIdAndUserId(Long id, Long userId);
 
     @Override
-    @EntityGraph(attributePaths = {"account", "category"})
+    @EntityGraph(attributePaths = { "account", "category" })
     Page<Transaction> findAll(Specification<Transaction> specification, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = { "account", "category" })
+    List<Transaction> findAll(Specification<Transaction> specification, Sort sort);
 
     @Query(value = """
             SELECT t.date AS day, COUNT(*) AS count,
@@ -42,14 +49,19 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long>,
 
     interface DailyTotal {
         LocalDate getDay();
+
         Long getCount();
+
         BigDecimal getIncome();
+
         BigDecimal getExpense();
     }
 
     interface CategoryTotal {
         Long getId();
+
         String getName();
+
         BigDecimal getAmount();
     }
 }

@@ -3,6 +3,8 @@ package br.com.monviflow.transaction;
 import java.util.List;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import java.nio.charset.StandardCharsets;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +32,13 @@ public class TransactionController {
     @GetMapping("/search")
     public TransactionPage search(Authentication auth, @Valid @ModelAttribute TransactionFilter filter) {
         return service.search(auth.getName(), filter);
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(Authentication auth, @Valid @ModelAttribute TransactionFilter filter) {
+        return ResponseEntity.ok().header("Content-Type", "text/csv; charset=UTF-8")
+                .header("Content-Disposition", "attachment; filename=\"movimentacoes.csv\"")
+                .body(service.export(auth.getName(), filter).getBytes(StandardCharsets.UTF_8));
     }
 
     @PutMapping("/{id}")
