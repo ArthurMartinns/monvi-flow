@@ -27,6 +27,11 @@ public class TransactionController {
         return service.list(auth.getName());
     }
 
+    @GetMapping("/search")
+    public TransactionPage search(Authentication auth, @Valid @ModelAttribute TransactionFilter filter) {
+        return service.search(auth.getName(), filter);
+    }
+
     @PutMapping("/{id}")
     public TransactionResponse update(Authentication auth, @PathVariable Long id,
             @Valid @RequestBody CreateTransactionRequest request) {
