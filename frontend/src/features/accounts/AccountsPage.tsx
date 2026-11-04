@@ -12,13 +12,13 @@ import { formatMoney, parseBalance } from "../../lib/money";
 import { sumBalances } from "./accountTotals";
 
 const primaryButtonClass =
-  "inline-flex min-h-11 w-auto shrink-0 cursor-pointer items-center justify-center gap-[9px] justify-self-start rounded-xl border border-transparent bg-[#004d3c] px-5 py-2.5 text-sm leading-[22px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#0b624d] hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none @min-[541px]:justify-self-end";
+  "inline-flex min-h-11 w-auto shrink-0 cursor-pointer items-center justify-center gap-[9px] justify-self-start rounded-xl border border-transparent bg-accent px-5 py-2.5 text-sm leading-[22px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#0b624d]  focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none @min-[541px]:justify-self-end";
 const accountIconClass =
-  "grid size-[42px] shrink-0 place-items-center rounded-xl bg-[#e9efe2] text-[#004d3c] data-[tone=1]:bg-[#f2e9d8] data-[tone=2]:bg-[#e9eeeb]";
+  "grid size-8 shrink-0 place-items-center text-muted";
 const amountClass =
-  "m-0 mt-[5px] text-[27px] leading-[1.3] font-semibold tracking-[-.025em] text-[#004d3c] tabular-nums [overflow-wrap:anywhere] data-[negative=true]:text-[#8c5b3e]";
+  "m-0 mt-[5px] text-[27px] leading-[1.3] font-semibold tracking-[-.025em] text-accent tabular-nums [overflow-wrap:anywhere] data-[negative=true]:text-[#8c5b3e]";
 const inputClass =
-  "block m-0 h-12 w-full rounded-[10px] border border-[#d9e1d4] bg-white px-3.5 py-3 text-sm text-[#153c32] outline-none transition-[border-color,box-shadow] placeholder:text-[#98a093] focus:border-[#004d3c] focus:shadow-[0_0_0_3px_#004d3c0d] aria-invalid:border-[#c86d64] motion-reduce:transition-none";
+  "block m-0 h-11 w-full rounded-[10px] border border-control bg-white px-3.5 py-3 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-muted focus:border-[#004d3c] focus:ring-2 focus:ring-accent/15 aria-invalid:border-[#c86d64] motion-reduce:transition-none";
 
 function WalletIcon({ className = "" }: { className?: string }) {
   return (
@@ -232,7 +232,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
       ref={pageRef}
       id="contas"
       className={
-        "@container mx-auto w-full max-w-[1120px] bg-[#fafaf7] pt-11 pb-14 text-sm leading-normal text-[#153c32] max-[600px]:pt-8"
+        "@container mx-auto w-full max-w-[1120px] bg-canvas pt-8 pb-10 text-sm leading-normal text-ink max-[600px]:pt-6"
       }
       aria-labelledby="accounts-title"
     >
@@ -242,22 +242,15 @@ export default function AccountsPage({ onSessionExpired }: Props) {
         }
       >
         <div className={"min-w-0"}>
-          <p
-            className={
-              "m-0 mb-[7px] text-[11px] font-semibold tracking-[.07em] text-[#8c5b3e]"
-            }
-          >
-            VISÃO FINANCEIRA
-          </p>
           <h1
             id="accounts-title"
             className={
-              "m-0 text-[30px] leading-[1.2] font-semibold tracking-[-.035em] @min-[541px]:text-[32px]"
+              "m-0 text-2xl leading-[1.2] font-semibold tracking-[-.035em] @min-[541px]:text-2xl"
             }
           >
             Minhas contas
           </h1>
-          <p className={"m-0 mt-2.5 text-sm leading-[22px] text-[#6e7b70]"}>
+          <p className={"m-0 mt-2.5 text-sm leading-[22px] text-muted"}>
             Gerencie seu dinheiro em um só lugar.
           </p>
         </div>
@@ -286,14 +279,14 @@ export default function AccountsPage({ onSessionExpired }: Props) {
       <section
         aria-label="Saldo consolidado"
         className={
-          "mt-8 flex items-start justify-between gap-4 rounded-[20px] border border-[#dde6d6] bg-linear-to-r from-[#e9efe2] to-[#eff3e9] p-6 @min-[541px]:gap-6 @min-[541px]:px-7 @min-[541px]:py-[26px]"
+          "mt-8 flex items-start justify-between gap-4 rounded-lg border border-[#dde6d6] bg-soft p-6 @min-[541px]:gap-6 @min-[541px]:px-7 @min-[541px]:py-[26px]"
         }
       >
         <div className={"min-w-0"}>
           <p className={"m-0 text-sm text-[#526a59]"}>Saldo total das contas</p>
           <p
             className={
-              "m-0 mt-[15px] text-[30px] leading-[1.25] font-semibold tracking-[-.035em] text-[#004d3c] tabular-nums [overflow-wrap:anywhere] @min-[541px]:text-[34px]"
+              "m-0 mt-[15px] text-[30px] leading-[1.25] font-semibold tracking-[-.035em] text-accent tabular-nums [overflow-wrap:anywhere] @min-[541px]:text-[34px]"
             }
           >
             {loading || listError ? "—" : formatMoney(total)}
@@ -310,7 +303,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
         </div>
         <span
           className={
-            "grid size-11 shrink-0 place-items-center rounded-[13px] border border-[#dce5d5] bg-white/50 text-[#004d3c]"
+            "grid size-8 shrink-0 place-items-center text-muted"
           }
         >
           <WalletIcon />
@@ -318,14 +311,14 @@ export default function AccountsPage({ onSessionExpired }: Props) {
       </section>
 
       {notice && (
-        <p role="status" className={"m-0 mt-5 text-[13px] text-[#004d3c]"}>
+        <p role="status" className={"m-0 mt-5 text-[13px] text-accent"}>
           {notice}
         </p>
       )}
 
       <div
         className={
-          "mt-8 mb-5 flex flex-wrap items-center justify-between gap-3 [&>h2]:m-0 [&>h2]:text-lg [&>h2]:font-semibold [&>h2]:tracking-[-.015em] [&>span]:text-xs [&>span]:text-[#6e7b70] @min-[541px]:[&>span]:text-[13px]"
+          "mt-8 mb-5 flex flex-wrap items-center justify-between gap-3 [&>h2]:m-0 [&>h2]:text-lg [&>h2]:font-semibold [&>h2]:tracking-[-.015em] [&>span]:text-xs [&>span]:text-muted @min-[541px]:[&>span]:text-[13px]"
         }
       >
         <h2>Suas contas</h2>
@@ -342,7 +335,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
           <p
             role="status"
             className={
-              "m-0 rounded-2xl border border-[#e0e6dc] bg-white p-7 text-[#6e7b70]"
+              "m-0 rounded-lg border border-line bg-white p-7 text-muted"
             }
           >
             Carregando suas contas…
@@ -350,7 +343,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
         ) : listError ? (
           <div
             className={
-              "m-0 rounded-2xl border border-[#e0e6dc] bg-white p-7 text-[#6e7b70]"
+              "m-0 rounded-lg border border-line bg-white p-7 text-muted"
             }
           >
             <p role="alert" className={"m-0 text-sm text-[#a33932]"}>
@@ -360,7 +353,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
               type="button"
               onClick={() => setAttempt((value) => value + 1)}
               className={
-                "mt-5 inline-flex min-h-11 w-auto cursor-pointer items-center justify-center rounded-xl border border-transparent bg-[#004d3c] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
+                "mt-5 inline-flex min-h-11 w-auto cursor-pointer items-center justify-center rounded-xl border border-transparent bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
               }
             >
               Tentar novamente
@@ -369,12 +362,12 @@ export default function AccountsPage({ onSessionExpired }: Props) {
         ) : accounts.length === 0 ? (
           <div
             className={
-              "flex flex-col items-center rounded-[18px] border border-dashed border-[#ccd6c5] bg-[#f9faf6] px-6 py-12 text-center [&>h3]:m-0 [&>h3]:mt-5 [&>h3]:text-[19px] [&>h3]:font-semibold [&>h3]:tracking-[-.02em] [&>p]:m-0 [&>p]:mt-[9px] [&>p]:mb-6 [&>p]:max-w-[300px] [&>p]:leading-[23px] [&>p]:text-[#6e7b70]"
+              "flex flex-col items-center rounded-lg border border-dashed border-[#ccd6c5] bg-[#f9faf6] px-6 py-12 text-center [&>h3]:m-0 [&>h3]:mt-5 [&>h3]:text-[19px] [&>h3]:font-semibold [&>h3]:tracking-[-.02em] [&>p]:m-0 [&>p]:mt-[9px] [&>p]:mb-6 [&>p]:max-w-[300px] [&>p]:leading-[23px] [&>p]:text-muted"
             }
           >
             <span
               className={
-                "grid size-[52px] shrink-0 place-items-center rounded-[15px] bg-[#e9efe2] text-[#004d3c]"
+                "grid size-[52px] shrink-0 place-items-center rounded-[15px] bg-[#e9efe2] text-accent"
               }
             >
               <WalletIcon />
@@ -402,7 +395,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
               <li
                 key={account.id}
                 className={
-                  "min-w-0 rounded-2xl border border-[#e0e6dc] bg-white p-6 shadow-[0_2px_4px_#153c3203] transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-[#b9c9b3] hover:shadow-[0_9px_24px_#153c320a] motion-reduce:hover:translate-y-0 motion-reduce:transition-none"
+                  "min-w-0 rounded-lg border border-line bg-white p-6  transition-[transform,border-color,box-shadow] duration-200  hover:border-[#b9c9b3]  motion-reduce:hover:translate-y-0 motion-reduce:transition-none"
                 }
               >
                 <div className={"flex items-center justify-between gap-4"}>
@@ -426,7 +419,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                       aria-label={"Ações da conta " + account.name}
                       title="Ações da conta"
                       className={
-                        "grid size-8 cursor-pointer list-none place-items-center rounded-lg border-0 bg-transparent p-0 text-[#859183] hover:bg-[#f1f4ed] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] [&::-webkit-details-marker]:hidden"
+                        "grid size-8 cursor-pointer list-none place-items-center rounded-lg border-0 bg-transparent p-0 text-muted hover:bg-[#f1f4ed] hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] [&::-webkit-details-marker]:hidden"
                       }
                     >
                       <svg
@@ -443,7 +436,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                     </summary>
                     <div
                       className={
-                        "absolute top-10 right-0 z-5 w-40 rounded-xl border border-[#e0e6dc] bg-white p-1.5 shadow-[0_8px_24px_#153c3212] [&>button]:w-full [&>button]:cursor-pointer [&>button]:rounded-[7px] [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2.5 [&>button]:text-left [&>button]:text-[13px] [&>button]:text-[#153c32] [&>button:hover]:bg-[#f4f6f0] [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-2 [&>button:focus-visible]:outline-[#004d3c]"
+                        "absolute top-10 right-0 z-5 w-40 rounded-xl border border-line bg-white p-1.5 shadow-[0_8px_24px_#153c3212] [&>button]:w-full [&>button]:cursor-pointer [&>button]:rounded-[7px] [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2.5 [&>button]:text-left [&>button]:text-[13px] [&>button]:text-ink [&>button:hover]:bg-[#f4f6f0] [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-2 [&>button:focus-visible]:outline-[#004d3c]"
                       }
                     >
                       <button
@@ -481,7 +474,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                   {account.name}
                 </h3>
                 <dl className={"m-0 mt-5"}>
-                  <div className={"[&>dt]:text-[13px] [&>dt]:text-[#6e7b70]"}>
+                  <div className={"[&>dt]:text-[13px] [&>dt]:text-muted"}>
                     <dt>Saldo atual</dt>
                     <dd
                       className={amountClass}
@@ -492,7 +485,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                   </div>
                   <div
                     className={
-                      "mt-[22px] flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-[#e9ede6] pt-[15px] text-[13px] [&>dt]:text-[#6e7b70] [&>dd]:m-0 [&>dd]:font-medium [&>dd]:tabular-nums [&>dd]:[overflow-wrap:anywhere]"
+                      "mt-[22px] flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-[#e9ede6] pt-[15px] text-[13px] [&>dt]:text-muted [&>dd]:m-0 [&>dd]:font-medium [&>dd]:tabular-nums [&>dd]:[overflow-wrap:anywhere]"
                     }
                   >
                     <dt>Saldo inicial</dt>
@@ -508,7 +501,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
       <dialog
         ref={dialogRef}
         className={
-          "fixed inset-0 m-auto max-h-[calc(100dvh-40px)] w-[min(460px,calc(100vw-32px))] overflow-y-auto rounded-3xl border border-[#e0e6dc] bg-[#fffefa] p-0 text-[#153c32] shadow-[0_24px_80px_#10271f30] backdrop:bg-[#182c244d] backdrop:backdrop-blur-[4px]"
+          "fixed inset-0 m-auto max-h-[calc(100dvh-40px)] w-[min(460px,calc(100vw-32px))] overflow-y-auto rounded-xl border border-line bg-[#fffefa] p-0 text-ink shadow-[0_24px_80px_#10271f30] backdrop:bg-[#182c244d] "
         }
         aria-labelledby="account-modal-title"
         aria-describedby="account-modal-description"
@@ -531,7 +524,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
               disabled={saving}
               aria-label="Fechar janela"
               className={
-                "grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-[#859183] hover:bg-[#f1f4ed] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50"
+                "grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-muted hover:bg-[#f1f4ed] hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50"
               }
             >
               <svg
@@ -564,7 +557,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
           </h2>
           <p
             id="account-modal-description"
-            className={"m-0 mt-2.5 text-sm leading-[23px] text-[#6e7b70]"}
+            className={"m-0 mt-2.5 text-sm leading-[23px] text-muted"}
           >
             {selectedAccount
               ? accountAction === "rename"
@@ -609,7 +602,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                   <label htmlFor="initial-balance">Saldo inicial</label>
                   <div
                     className={
-                      "relative [&>span]:pointer-events-none [&>span]:absolute [&>span]:top-1/2 [&>span]:left-3.5 [&>span]:-translate-y-1/2 [&>span]:text-sm [&>span]:text-[#6e7b70] [&>input]:pl-11 [&>input]:tabular-nums"
+                      "relative [&>span]:pointer-events-none [&>span]:absolute [&>span]:top-1/2 [&>span]:left-3.5 [&>span]:-translate-y-1/2 [&>span]:text-sm [&>span]:text-muted [&>input]:pl-11 [&>input]:tabular-nums"
                     }
                   >
                     <span aria-hidden="true">R$</span>
@@ -633,7 +626,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                   </div>
                   <p
                     id="balance-help"
-                    className={"m-0 text-xs leading-[19px] text-[#6e7b70]"}
+                    className={"m-0 text-xs leading-[19px] text-muted"}
                   >
                     Use o formato 1.250,90. Valores negativos são permitidos.
                   </p>
@@ -651,14 +644,14 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                 )}
                 <div
                   className={
-                    "mt-0.5 flex flex-wrap items-center justify-end gap-2.5 border-t border-[#e0e6dc] pt-[22px]"
+                    "mt-0.5 flex flex-wrap items-center justify-end gap-2.5 border-t border-line pt-[22px]"
                   }
                 >
                   <button
                     type="button"
                     onClick={() => setModal(null)}
                     className={
-                      "inline-flex min-h-11 w-auto shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e0e6dc] bg-transparent px-5 py-2.5 text-sm leading-[22px] font-medium text-[#657160] hover:bg-[#f0f3eb] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50"
+                      "inline-flex min-h-11 w-auto shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line bg-transparent px-5 py-2.5 text-sm leading-[22px] font-medium text-[#657160] hover:bg-[#f0f3eb] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50"
                     }
                   >
                     Cancelar
@@ -715,12 +708,12 @@ export default function AccountsPage({ onSessionExpired }: Props) {
                     {formError}
                   </p>
                 )}
-                <div className="flex flex-wrap justify-end gap-3 border-t border-[#e0e6dc] pt-5">
+                <div className="flex flex-wrap justify-end gap-3 border-t border-line pt-5">
                   <button
                     type="button"
                     onClick={() => setModal(null)}
                     autoFocus={accountAction === "delete"}
-                    className="min-h-11 cursor-pointer rounded-xl border border-[#e0e6dc] px-5 text-sm text-[#657160] hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
+                    className="min-h-11 cursor-pointer rounded-xl border border-line px-5 text-sm text-[#657160] hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
                   >
                     Cancelar
                   </button>
@@ -744,7 +737,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
           {selectedAccount && accountAction === "details" && (
             <dl
               className={
-                "m-0 mt-[26px] rounded-[14px] border border-[#e0e6dc] bg-[#f5f7f0] p-5 [&>div+div]:mt-5 [&>div+div]:border-t [&>div+div]:border-[#e0e6dc] [&>div+div]:pt-4 [&_dt]:text-[13px] [&_dt]:text-[#6e7b70] [&_dd]:m-0 [&_dd]:mt-2 [&_dd]:tabular-nums [&_dd]:[overflow-wrap:anywhere]"
+                "m-0 mt-[26px] rounded-[14px] border border-line bg-[#f5f7f0] p-5 [&>div+div]:mt-5 [&>div+div]:border-t [&>div+div]:border-line [&>div+div]:pt-4 [&_dt]:text-[13px] [&_dt]:text-muted [&_dd]:m-0 [&_dd]:mt-2 [&_dd]:tabular-nums [&_dd]:[overflow-wrap:anywhere]"
               }
             >
               <div>

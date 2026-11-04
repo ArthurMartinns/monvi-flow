@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import RowMenu from "../../components/RowMenu";
 import type { FormEvent } from "react";
 import {
   createCategory,
@@ -6,13 +7,13 @@ import {
   listCategories,
   renameCategory,
 } from "../../lib/categories";
-import type { Category } from "../../lib/categories";
+import type { Category, CategoryType } from "../../lib/categories";
 import { ApiError } from "../../lib/http";
 
 const buttonClass =
-  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#004d3c] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-wait disabled:opacity-50";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-wait disabled:opacity-50";
 const inputClass =
-  "mt-2 block h-12 w-full rounded-xl border border-[#d9e1d4] bg-white px-3.5 text-sm text-[#153c32] outline-none focus:border-[#004d3c] focus:ring-3 focus:ring-[#004d3c]/5 aria-invalid:border-red-600";
+  "mt-2 block h-11 w-full rounded-xl border border-control bg-white px-3.5 text-sm text-ink outline-none focus:border-[#004d3c] focus:ring-3 focus:ring-[#004d3c]/5 aria-invalid:border-red-600";
 
 type Modal =
   | { action: "create" }
@@ -24,6 +25,7 @@ export default function CategoriesPage({
   onSessionExpired: () => void;
 }) {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [filter, setFilter] = useState<CategoryType | "ALL">("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -34,7 +36,7 @@ export default function CategoriesPage({
   const [notice, setNotice] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,7 +77,7 @@ export default function CategoriesPage({
     };
   }, [modal]);
 
-  function openModal(next: Modal, trigger: HTMLButtonElement) {
+  function openModal(next: Modal, trigger: HTMLElement) {
     returnFocusRef.current = trigger;
     setFormError("");
     setFields([]);
@@ -139,17 +141,14 @@ export default function CategoriesPage({
   return (
     <section
       id="categorias"
-      className="mx-auto w-full max-w-[1120px] pt-11 pb-14 text-sm text-[#153c32] max-[600px]:pt-8"
+      className="mx-auto w-full max-w-[1120px] pt-8 pb-10 text-sm text-ink max-[600px]:pt-6"
     >
       <header className="flex flex-wrap items-center justify-between gap-5">
         <div>
-          <p className="mb-2 text-xs font-medium tracking-wider text-[#8c5b3e] uppercase">
-            Organização financeira
-          </p>
-          <h1 className="text-[30px] leading-tight font-semibold tracking-tight">
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight">
             Categorias
           </h1>
-          <p className="mt-2 leading-relaxed text-[#748075]">
+          <p className="mt-2 leading-relaxed text-muted">
             Organize suas receitas e despesas do seu jeito.
           </p>
         </div>
@@ -168,16 +167,16 @@ export default function CategoriesPage({
         </button>
       </header>
 
-      <p role="status" className="mt-5 text-[#004d3c]">
+      <p role="status" className={notice ? "mt-4 text-accent" : "sr-only"}>
         {notice}
       </p>
 
       {loading ? (
-        <p role="status" className="py-12 text-[#748075]">
+        <p role="status" className="py-12 text-muted">
           Carregando categorias…
         </p>
       ) : error ? (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-white p-6">
+        <div className="mt-6 rounded-lg border border-red-200 bg-white p-6">
           <p role="alert" className="text-red-800">
             {error}
           </p>
@@ -194,133 +193,34 @@ export default function CategoriesPage({
           </button>
         </div>
       ) : categories.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-[#d9e1d4] bg-white px-6 py-14 text-center">
+        <div className="mt-5 rounded-lg border border-dashed border-control bg-white px-6 py-14 text-center">
           <h2 className="text-lg font-semibold">
             Tudo começa com uma categoria
           </h2>
-          <p className="mt-2 text-[#748075]">
+          <p className="mt-2 text-muted">
             Adicione opções como salário, alimentação ou transporte.
           </p>
         </div>
       ) : (
-        <div className="mt-5 grid gap-6 md:grid-cols-2">
-          {(["INCOME", "EXPENSE"] as const).map((type) => {
-            const items = categories.filter(
-              (category) => category.type === type,
-            );
-            return (
-              <section
-                key={type}
-                className="min-w-0 self-start overflow-hidden rounded-2xl border border-[#e3e7df] bg-white"
-              >
-                <header
-                  className={`flex items-center justify-between gap-3 px-5 py-4 ${type === "INCOME" ? "bg-[#e9efe2]" : "bg-[#f2e9d8]"}`}
-                >
-                  <h2 className="text-base font-semibold">
-                    {type === "INCOME" ? "Receitas" : "Despesas"}
-                  </h2>
-                  <span className="text-xs text-[#63766a]">
-                    {items.length}{" "}
-                    {items.length === 1 ? "categoria" : "categorias"}
-                  </span>
-                </header>
-                {items.length === 0 ? (
-                  <p className="px-5 py-7 text-[#748075]">
-                    Nenhuma categoria de{" "}
-                    {type === "INCOME" ? "receita" : "despesa"} cadastrada.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-[#edf0e9]">
-                    {items.map((category) => (
-                      <li
-                        key={category.id}
-                        className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[#fafaf7] motion-reduce:transition-none"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`grid size-9 shrink-0 place-items-center rounded-xl ${type === "INCOME" ? "bg-[#e9efe2] text-[#004d3c]" : "bg-[#f2e9d8] text-[#8c5b3e]"}`}
-                        >
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.7"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className={
-                              type === "EXPENSE" ? "rotate-90" : undefined
-                            }
-                          >
-                            <path d="M6 18 18 6M6 6h12v12" />
-                          </svg>
-                        </span>
-                        <span className="min-w-0 flex-1 font-medium break-words">
-                          {category.name}
-                        </span>
-                        <div className="flex shrink-0 gap-1">
-                          <button
-                            type="button"
-                            aria-label={`Renomear ${category.name}`}
-                            title="Renomear"
-                            onClick={(event) =>
-                              openModal(
-                                { action: "rename", category },
-                                event.currentTarget,
-                              )
-                            }
-                            className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-[#e9efe2] hover:text-[#004d3c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#004d3c]"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="m16 3 5 5L9 20l-6 1 1-6L16 3ZM14 5l5 5" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Excluir ${category.name}`}
-                            title="Excluir"
-                            onClick={(event) =>
-                              openModal(
-                                { action: "delete", category },
-                                event.currentTarget,
-                              )
-                            }
-                            className="grid size-9 cursor-pointer place-items-center rounded-lg text-[#748075] transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
-                            </svg>
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            );
-          })}
-        </div>
+        <section className="mt-5 rounded-lg border border-line bg-white">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-3 sm:px-5">
+            <h2 className="text-base font-semibold">Categorias cadastradas</h2>
+            <div className="flex gap-1" aria-label="Filtrar categorias por tipo">
+              {(["ALL", "INCOME", "EXPENSE"] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`min-h-11 cursor-pointer rounded-md px-3 text-sm focus-visible:outline-2 focus-visible:outline-accent sm:min-h-9 ${filter === value ? "bg-soft font-medium text-ink" : "text-muted hover:bg-soft"}`}>{value === "ALL" ? "Todas" : value === "INCOME" ? "Receitas" : "Despesas"}</button>)}
+            </div>
+          </header>
+          <ul className="grid md:grid-cols-2">
+            {categories.filter((category) => filter === "ALL" || category.type === filter).map((category) => <li key={category.id} className="flex min-w-0 items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 md:even:border-l sm:px-5">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-muted ${category.type === "EXPENSE" ? "rotate-90" : ""}`}><path d="M6 18 18 6M6 6h12v12" /></svg>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium" title={category.name}>{category.name}</span><span className="mt-1 block text-[13px] text-muted">{category.type === "INCOME" ? "Receita" : "Despesa"}</span></span>
+              <RowMenu name={category.name} actions={[
+                { label: "Renomear", onSelect: (trigger) => openModal({ action: "rename", category }, trigger) },
+                { label: "Excluir", danger: true, onSelect: (trigger) => openModal({ action: "delete", category }, trigger) },
+              ]} />
+            </li>)}
+            {!categories.some((category) => filter === "ALL" || category.type === filter) && <li className="col-span-full px-5 py-6 text-muted">Nenhuma categoria encontrada.</li>}
+          </ul>
+        </section>
       )}
 
       {modal && (
@@ -328,7 +228,7 @@ export default function CategoriesPage({
           ref={dialogRef}
           aria-labelledby="category-title"
           aria-describedby="category-description"
-          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-3xl border border-[#e3e7df] bg-[#fafaf7] p-6 text-[#153c32] shadow-xl backdrop:bg-[#153c32]/35 backdrop:backdrop-blur-sm sm:p-8"
+          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-xl border border-line bg-canvas p-6 text-ink shadow-xl backdrop:bg-[#153c32]/35  sm:p-8"
           onCancel={(event) => {
             event.preventDefault();
             if (!saving) setModal(null);
@@ -346,7 +246,7 @@ export default function CategoriesPage({
           </h2>
           <p
             id="category-description"
-            className="mt-2 text-sm leading-relaxed text-[#748075]"
+            className="mt-2 text-sm leading-relaxed text-muted"
           >
             {modal.action === "create" ? (
               "Escolha um nome e o tipo de movimentação."
@@ -418,7 +318,7 @@ export default function CategoriesPage({
                 disabled={saving}
                 onClick={() => setModal(null)}
                 autoFocus={modal.action === "delete"}
-                className="min-h-11 cursor-pointer rounded-xl border border-[#d9e1d4] px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50"
+                className="min-h-11 cursor-pointer rounded-xl border border-control px-4 py-2 text-sm font-medium hover:bg-[#e9efe2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:opacity-50"
               >
                 Cancelar
               </button>
