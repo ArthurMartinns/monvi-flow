@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -107,6 +109,50 @@ class AuthTests extends PostgresIntegrationTest {
 
         assertTrue(session.isInvalid());
         mvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldUpdateOnlyAuthenticatedUsersName() throws Exception {
+        var original = repository.findByEmail("arthur@example.com").orElseThrow();
+        var other = repository.saveAndFlush(new User("Maria", "maria@example.com", "unchanged"));
+        mvc.perform(patch("/api/users/me").with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\" Arthur Martins \",\"id\":" + other.getId()
+                        + ",\"email\":\"outro@example.com\",\"password\":\"outra-senha\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(original.getId()))
+                .andExpect(jsonPath("$.name").value("Arthur Martins"))
+                .andExpect(jsonPath("$.email").value("arthur@example.com"))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        var updated = repository.findById(original.getId()).orElseThrow();
+        assertEquals("Arthur Martins", updated.getName());
+        assertEquals(original.getPasswordHash(), updated.getPasswordHash());
+        assertEquals(original.getCreatedAt(), updated.getCreatedAt());
+        assertEquals("Maria", repository.findById(other.getId()).orElseThrow().getName());
+        mvc.perform(get("/api/auth/me").with(user("arthur@example.com")))
+                .andExpect(jsonPath("$.name").value("Arthur Martins"));
+    }
+
+    @Test
+    void shouldValidateProfileName() throws Exception {
+        for (String body : new String[] { "{}", "{\"name\":null}", "{\"name\":\" \"}",
+                "{\"name\":\"" + "a".repeat(101) + "\"}" }) {
+            mvc.perform(patch("/api/users/me").with(user("arthur@example.com")).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.fields[0]").value("name"));
+        }
+        assertEquals("Arthur", repository.findByEmail("arthur@example.com").orElseThrow().getName());
+    }
+
+    @Test
+    void shouldProtectProfileUpdates() throws Exception {
+        String body = "{\"name\":\"Outro nome\"}";
+        mvc.perform(patch("/api/users/me").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/users/me").with(user("arthur@example.com"))
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(patch("/api/users/me").with(user("missing@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
     }
 
     private CsrfToken token(MvcResult result) {
