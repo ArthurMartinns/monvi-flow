@@ -1,5 +1,6 @@
 package br.com.monviflow.user;
 
+import br.com.monviflow.category.CategoryRepository;
 import java.sql.SQLException;
 
 import org.hibernate.exception.ConstraintViolationException;
@@ -24,6 +25,9 @@ class UserServiceTests {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private CategoryRepository categories;
 
     @InjectMocks
     private UserService userService;

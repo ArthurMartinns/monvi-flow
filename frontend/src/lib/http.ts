@@ -41,7 +41,7 @@ export async function requestResponse(
       401: "Sua sessão expirou. Entre novamente.",
       403: "Sua sessão de segurança expirou. Tente novamente.",
       404: "Registro não encontrado. Atualize a página.",
-      409: "Este e-mail já está cadastrado.",
+      409: "Já existe um registro com esses dados.",
     };
     const fields = Array.isArray(body?.fields)
       ? body.fields.filter(
@@ -50,8 +50,10 @@ export async function requestResponse(
       : [];
     throw new ApiError(
       response.status,
-      messages[response.status] ??
-        "Não foi possível concluir a operação. Tente novamente.",
+      response.status === 409 && typeof body?.detail === "string" && body.detail.trim()
+        ? body.detail
+        : messages[response.status] ??
+          "Não foi possível concluir a operação. Tente novamente.",
       fields,
     );
   }

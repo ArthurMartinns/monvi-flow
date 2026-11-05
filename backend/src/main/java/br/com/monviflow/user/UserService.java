@@ -1,5 +1,9 @@
 package br.com.monviflow.user;
 
+import br.com.monviflow.category.Category;
+import br.com.monviflow.category.CategoryRepository;
+import br.com.monviflow.category.CategoryType;
+import java.util.List;
 import java.util.Locale;
 
 import org.hibernate.exception.ConstraintViolationException;
@@ -13,13 +17,16 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CategoryRepository categories;
 
     public UserService(
         UserRepository userRepository,
-        PasswordEncoder passwordEncoder
+        PasswordEncoder passwordEncoder,
+        CategoryRepository categories
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.categories = categories;
     }
 
     @Transactional
@@ -38,6 +45,16 @@ public class UserService {
         User user = new User(name, email, passwordHash);
         try {
             User savedUser = userRepository.saveAndFlush(user);
+            categories.saveAllAndFlush(List.of(
+                new Category(savedUser.getId(), "Salário", CategoryType.INCOME),
+                new Category(savedUser.getId(), "Outras receitas", CategoryType.INCOME),
+                new Category(savedUser.getId(), "Alimentação", CategoryType.EXPENSE),
+                new Category(savedUser.getId(), "Moradia", CategoryType.EXPENSE),
+                new Category(savedUser.getId(), "Transporte", CategoryType.EXPENSE),
+                new Category(savedUser.getId(), "Saúde", CategoryType.EXPENSE),
+                new Category(savedUser.getId(), "Lazer", CategoryType.EXPENSE),
+                new Category(savedUser.getId(), "Outras despesas", CategoryType.EXPENSE)
+            ));
             return UserResponse.from(savedUser);
         } catch (DataIntegrityViolationException exception) {
             // Duas requisições podem passar pela consulta de existência ao mesmo tempo.

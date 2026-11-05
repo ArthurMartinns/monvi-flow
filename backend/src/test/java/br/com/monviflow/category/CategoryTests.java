@@ -10,9 +10,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -184,6 +193,68 @@ class CategoryTests extends PostgresIntegrationTest {
         } finally {
             jdbc.execute("DROP TABLE category_reference_test");
         }
+    }
+
+    @Test
+    void shouldRejectDuplicateNameIgnoringCaseAndSpaces() throws Exception {
+        createCategory("arthur@example.com");
+        postCategory("arthur@example.com", " ALIMENTACAO ", "EXPENSE")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Categoria já cadastrada"))
+                .andExpect(jsonPath("$.detail").value("Você já tem uma categoria com esse nome e tipo."));
+        assertEquals(1, categories.count());
+        postCategory("arthur@example.com", "Alimentacao", "INCOME").andExpect(status().isCreated());
+        postCategory("maria@example.com", "Alimentacao", "EXPENSE").andExpect(status().isCreated());
+        assertEquals(3, categories.count());
+    }
+
+    @Test
+    void shouldKeepOriginalNameWhenRenameConflicts() throws Exception {
+        Category first = createCategory("arthur@example.com");
+        Long owner = users.findByEmail("arthur@example.com").orElseThrow().getId();
+        Category second = categories.saveAndFlush(new Category(owner, "Lazer", CategoryType.EXPENSE));
+        mvc.perform(patch("/api/categories/{id}", second.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" alimentacao \"}"))
+                .andExpect(status().isConflict());
+        assertEquals("Lazer", categories.findById(second.getId()).orElseThrow().getName());
+        mvc.perform(patch("/api/categories/{id}", first.getId())
+                .with(user("arthur@example.com")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" ALIMENTACAO \"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("ALIMENTACAO"));
+    }
+
+    @Test
+    void shouldEnforceUniqueNamesInDatabase() {
+        createCategory("arthur@example.com");
+        Long owner = users.findByEmail("arthur@example.com").orElseThrow().getId();
+        assertThrows(DataIntegrityViolationException.class, () -> categories.saveAndFlush(
+                new Category(owner, " ALIMENTACAO ", CategoryType.EXPENSE)));
+        assertEquals(1, categories.count());
+    }
+
+    @Test
+    void shouldRejectConcurrentDuplicateCategories() throws Exception {
+        var start = new CyclicBarrier(2);
+        Callable<Integer> create = () -> {
+            start.await(10, TimeUnit.SECONDS);
+            return postCategory("arthur@example.com", "Mercado", "EXPENSE")
+                    .andReturn().getResponse().getStatus();
+        };
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(create);
+            var second = executor.submit(create);
+            var statuses = new ArrayList<>(List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)));
+            statuses.sort(Integer::compareTo);
+            assertEquals(List.of(201, 409), statuses);
+        }
+        assertEquals(1, categories.count());
+    }
+
+    private ResultActions postCategory(String email, String name, String type) throws Exception {
+        return mvc.perform(post("/api/categories").with(user(email)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"%s\",\"type\":\"%s\"}".formatted(name, type)));
     }
 
     private Category createCategory(String email) {

@@ -3,6 +3,7 @@ package br.com.monviflow.shared;
 import br.com.monviflow.user.EmailAlreadyRegisteredException;
 import br.com.monviflow.account.AccountInUseException;
 import br.com.monviflow.category.CategoryInUseException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -46,7 +47,14 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(DataAccessException.class)
-    public ProblemDetail handleUnexpectedError() {
+    public ProblemDetail handleUnexpectedError(DataAccessException exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation
+                    && "ux_category_user_type_name".equals(violation.getConstraintName())) {
+                return problem(HttpStatus.CONFLICT, "Categoria já cadastrada",
+                        "Você já tem uma categoria com esse nome e tipo.");
+            }
+        }
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno",
                 "Não foi possível concluir a operação.");
     }
