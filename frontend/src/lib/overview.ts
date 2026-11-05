@@ -14,8 +14,14 @@ export type Overview = {
   budgets: Budget[];
 };
 
-export function getOverview(month: string, signal?: AbortSignal) {
-  return request<Overview>(`/api/overview?${new URLSearchParams({ month })}`, {
+export function getOverview(
+  month: string,
+  accountId: string,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ month });
+  if (accountId) params.set("accountId", accountId);
+  return request<Overview>(`/api/overview?${params}`, {
     signal,
   });
 }

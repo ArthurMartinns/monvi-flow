@@ -2,11 +2,13 @@ package br.com.monviflow.overview;
 
 import br.com.monviflow.PostgresIntegrationTest;
 import br.com.monviflow.account.*;
+import br.com.monviflow.budget.*;
 import br.com.monviflow.category.*;
 import br.com.monviflow.transaction.*;
 import br.com.monviflow.user.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,153 +23,243 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class OverviewTests extends PostgresIntegrationTest {
-    @Autowired private MockMvc mvc;
-    @Autowired private TransactionRepository transactions;
-    @Autowired private AccountRepository accounts;
-    @Autowired private CategoryRepository categories;
-    @Autowired private UserRepository users;
-    private Long owner;
-    private Account account;
-    private Category income;
-    private Category food;
-    private Category transport;
+        @Autowired
+        private MockMvc mvc;
+        @Autowired
+        private TransactionRepository transactions;
+        @Autowired
+        private AccountRepository accounts;
+        @Autowired
+        private CategoryRepository categories;
+        @Autowired
+        private UserRepository users;
+        @Autowired
+        private BudgetRepository budgets;
+        @Autowired
+        private BudgetService budgetService;
+        private Long owner;
+        private Account account;
+        private Account bank;
+        private Category income;
+        private Category food;
+        private Category transport;
 
-    @BeforeEach
-    void setup() {
-        transactions.deleteAll();
-        categories.deleteAll();
-        accounts.deleteAll();
-        users.deleteAll();
-        owner = users.save(new User("Arthur", "arthur@example.com", "unused")).getId();
-        users.save(new User("Maria", "maria@example.com", "unused"));
-        account = accounts.save(new Account(owner, "Carteira", new BigDecimal("100.00")));
-        accounts.save(new Account(owner, "Banco", new BigDecimal("25.00")));
-        income = categories.save(new Category(owner, "Salario", CategoryType.INCOME));
-        food = categories.save(new Category(owner, "Alimentacao", CategoryType.EXPENSE));
-        transport = categories.save(new Category(owner, "Transporte", CategoryType.EXPENSE));
-    }
-
-    @Test
-    void shouldSeparateCurrentBalanceFromMonthlyResultAndGroupExpenses() throws Exception {
-        save(owner, account, income, "200.10", "2026-02-01", "Salario");
-        save(owner, account, food, "20.00", "2026-02-15", "Mercado");
-        save(owner, account, transport, "30.05", "2026-02-28", "Onibus");
-        save(owner, account, income, "10.00", "2026-01-31", "Anterior");
-        save(owner, account, income, "5.00", "2026-03-01", "Posterior");
-        Long maria = users.findByEmail("maria@example.com").orElseThrow().getId();
-        var foreignAccount = accounts.save(new Account(maria, "Outra", BigDecimal.ZERO));
-        var foreignCategory = categories.save(new Category(maria, "Outra", CategoryType.INCOME));
-        save(maria, foreignAccount, foreignCategory, "999.00", "2026-02-01", "Outro usuario");
-        mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalBalance").value("290.05"))
-                .andExpect(jsonPath("$.accountCount").value(2))
-                .andExpect(jsonPath("$.income").value("200.10"))
-                .andExpect(jsonPath("$.expense").value("50.05"))
-                .andExpect(jsonPath("$.result").value("150.05"))
-                .andExpect(jsonPath("$.transactionCount").value(3))
-                .andExpect(jsonPath("$.days.length()").value(3))
-                .andExpect(jsonPath("$.days[0].date").value("2026-02-01"))
-                .andExpect(jsonPath("$.days[2].expense").value("30.05"))
-                .andExpect(jsonPath("$.categories.length()").value(2))
-                .andExpect(jsonPath("$.categories[0].name").value("Transporte"))
-                .andExpect(jsonPath("$.categories[0].amount").value("30.05"));
-    }
-
-    @Test
-    void shouldReturnEmptyMonthAndEmptyUser() throws Exception {
-        mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalBalance").value("125.00"))
-                .andExpect(jsonPath("$.income").value("0.00"))
-                .andExpect(jsonPath("$.expense").value("0.00"))
-                .andExpect(jsonPath("$.result").value("0.00"))
-                .andExpect(jsonPath("$.transactionCount").value(0))
-                .andExpect(jsonPath("$.days").isEmpty())
-                .andExpect(jsonPath("$.categories").isEmpty());
-        mvc.perform(get("/api/overview").param("month", "2026-02").with(user("maria@example.com")))
-                .andExpect(jsonPath("$.totalBalance").value("0.00"))
-                .andExpect(jsonPath("$.accountCount").value(0));
-    }
-
-    @Test
-    void shouldPreserveLargeAmountsAndNegativeMonthlyResult() throws Exception {
-        save(owner, account, food, "99999999999999999.99", "2026-02-01", "Despesa 1");
-        save(owner, account, food, "99999999999999999.99", "2026-02-02", "Despesa 2");
-        mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.expense").value("199999999999999999.98"))
-                .andExpect(jsonPath("$.result").value("-199999999999999999.98"))
-                .andExpect(jsonPath("$.totalBalance").value("-199999999999999874.98"));
-    }
-
-    @Test
-    void shouldFilterByDatesAccountCategoryTypeAndDescription() throws Exception {
-        save(owner, account, food, "20.00", "2026-02-15", "MeRcAdO semanal");
-        save(owner, account, income, "50.00", "2026-02-15", "Mercado reembolso");
-        save(owner, account, food, "10.00", "2026-01-15", "Mercado antigo");
-        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
-                .param("from", "2026-02-15").param("to", "2026-02-15")
-                .param("accountId", account.getId().toString()).param("categoryId", food.getId().toString())
-                .param("type", "EXPENSE").param("query", "mercado"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].description").value("MeRcAdO semanal"));
-    }
-
-    @Test
-    void shouldPaginateInStableOrderWithoutExposingOtherUsers() throws Exception {
-        for (int index = 0; index < 12; index++) save(owner, account, food, "1.00", "2026-02-15", "Item " + index);
-        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
-                .param("page", "1").param("size", "5"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(12))
-                .andExpect(jsonPath("$.totalPages").value(3))
-                .andExpect(jsonPath("$.content.length()").value(5))
-                .andExpect(jsonPath("$.content[0].description").value("Item 6"))
-                .andExpect(jsonPath("$.content[4].description").value("Item 2"));
-        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
-                .param("page", "2").param("size", "5"))
-                .andExpect(jsonPath("$.content.length()").value(2));
-        mvc.perform(get("/api/transactions/search").with(user("maria@example.com"))
-                .param("accountId", account.getId().toString()).param("userId", owner.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(0))
-                .andExpect(jsonPath("$.content").isEmpty());
-    }
-
-    @Test
-    void shouldTreatSearchWildcardsAsLiteralText() throws Exception {
-        save(owner, account, food, "1.00", "2026-02-01", "Taxa 10%_extra");
-        save(owner, account, food, "1.00", "2026-02-01", "Taxa 100 extra");
-        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com")).param("query", "%_"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].description").value("Taxa 10%_extra"));
-    }
-
-    @Test
-    void shouldValidateFiltersMonthAndAuthentication() throws Exception {
-        for (String[] param : new String[][] {{"page", "-1"}, {"size", "0"}, {"size", "101"},
-                {"accountId", "0"}, {"categoryId", "-1"}, {"type", "OTHER"}, {"from", "invalid"}, {"query", "a".repeat(101)}}) {
-            mvc.perform(get("/api/transactions/search").with(user("arthur@example.com")).param(param[0], param[1]))
-                    .andExpect(status().isBadRequest());
+        @BeforeEach
+        void setup() {
+                budgets.deleteAll();
+                transactions.deleteAll();
+                categories.deleteAll();
+                accounts.deleteAll();
+                users.deleteAll();
+                owner = users.save(new User("Arthur", "arthur@example.com", "unused")).getId();
+                users.save(new User("Maria", "maria@example.com", "unused"));
+                account = accounts.save(new Account(owner, "Carteira", new BigDecimal("100.00")));
+                bank = accounts.save(new Account(owner, "Banco", new BigDecimal("25.00")));
+                income = categories.save(new Category(owner, "Salario", CategoryType.INCOME));
+                food = categories.save(new Category(owner, "Alimentacao", CategoryType.EXPENSE));
+                transport = categories.save(new Category(owner, "Transporte", CategoryType.EXPENSE));
         }
-        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
-                .param("from", "2026-03-01").param("to", "2026-02-01"))
-                .andExpect(status().isBadRequest());
-        for (String month : new String[] {"2026-13", "invalid", "0000-01"}) {
-            mvc.perform(get("/api/overview").with(user("arthur@example.com")).param("month", month))
-                    .andExpect(status().isBadRequest());
-        }
-        mvc.perform(get("/api/overview").with(user("arthur@example.com"))).andExpect(status().isBadRequest());
-        mvc.perform(get("/api/overview").param("month", "2026-02")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/transactions/search")).andExpect(status().isUnauthorized());
-    }
 
-    private void save(Long userId, Account account, Category category, String amount, String date, String description) {
-        var request = new CreateTransactionRequest(account.getId(), category.getId(), description,
-                new BigDecimal(amount), LocalDate.parse(date));
-        transactions.save(new Transaction(userId, account, category, request));
-    }
+        @Test
+        void shouldSeparateCurrentBalanceFromMonthlyResultAndGroupExpenses() throws Exception {
+                save(owner, account, income, "200.10", "2026-02-01", "Salario");
+                save(owner, account, food, "20.00", "2026-02-15", "Mercado");
+                save(owner, account, transport, "30.05", "2026-02-28", "Onibus");
+                save(owner, account, income, "10.00", "2026-01-31", "Anterior");
+                save(owner, account, income, "5.00", "2026-03-01", "Posterior");
+                Long maria = users.findByEmail("maria@example.com").orElseThrow().getId();
+                var foreignAccount = accounts.save(new Account(maria, "Outra", BigDecimal.ZERO));
+                var foreignCategory = categories.save(new Category(maria, "Outra", CategoryType.INCOME));
+                save(maria, foreignAccount, foreignCategory, "999.00", "2026-02-01", "Outro usuario");
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalBalance").value("290.05"))
+                                .andExpect(jsonPath("$.accountCount").value(2))
+                                .andExpect(jsonPath("$.income").value("200.10"))
+                                .andExpect(jsonPath("$.expense").value("50.05"))
+                                .andExpect(jsonPath("$.result").value("150.05"))
+                                .andExpect(jsonPath("$.transactionCount").value(3))
+                                .andExpect(jsonPath("$.days.length()").value(3))
+                                .andExpect(jsonPath("$.days[0].date").value("2026-02-01"))
+                                .andExpect(jsonPath("$.days[2].expense").value("30.05"))
+                                .andExpect(jsonPath("$.categories.length()").value(2))
+                                .andExpect(jsonPath("$.categories[0].name").value("Transporte"))
+                                .andExpect(jsonPath("$.categories[0].amount").value("30.05"));
+        }
+
+        @Test
+        void shouldReturnEmptyMonthAndEmptyUser() throws Exception {
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalBalance").value("125.00"))
+                                .andExpect(jsonPath("$.income").value("0.00"))
+                                .andExpect(jsonPath("$.expense").value("0.00"))
+                                .andExpect(jsonPath("$.result").value("0.00"))
+                                .andExpect(jsonPath("$.transactionCount").value(0))
+                                .andExpect(jsonPath("$.days").isEmpty())
+                                .andExpect(jsonPath("$.categories").isEmpty());
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("maria@example.com")))
+                                .andExpect(jsonPath("$.totalBalance").value("0.00"))
+                                .andExpect(jsonPath("$.accountCount").value(0));
+        }
+
+        @Test
+        void shouldPreserveLargeAmountsAndNegativeMonthlyResult() throws Exception {
+                save(owner, account, food, "99999999999999999.99", "2026-02-01", "Despesa 1");
+                save(owner, account, food, "99999999999999999.99", "2026-02-02", "Despesa 2");
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.expense").value("199999999999999999.98"))
+                                .andExpect(jsonPath("$.result").value("-199999999999999999.98"))
+                                .andExpect(jsonPath("$.totalBalance").value("-199999999999999874.98"));
+        }
+
+        @Test
+        void shouldFilterByDatesAccountCategoryTypeAndDescription() throws Exception {
+                save(owner, account, food, "20.00", "2026-02-15", "MeRcAdO semanal");
+                save(owner, account, income, "50.00", "2026-02-15", "Mercado reembolso");
+                save(owner, account, food, "10.00", "2026-01-15", "Mercado antigo");
+                mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
+                                .param("from", "2026-02-15").param("to", "2026-02-15")
+                                .param("accountId", account.getId().toString())
+                                .param("categoryId", food.getId().toString())
+                                .param("type", "EXPENSE").param("query", "mercado"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalElements").value(1))
+                                .andExpect(jsonPath("$.content[0].description").value("MeRcAdO semanal"));
+        }
+
+        @Test
+        void shouldPaginateInStableOrderWithoutExposingOtherUsers() throws Exception {
+                for (int index = 0; index < 12; index++)
+                        save(owner, account, food, "1.00", "2026-02-15", "Item " + index);
+                mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
+                                .param("page", "1").param("size", "5"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalElements").value(12))
+                                .andExpect(jsonPath("$.totalPages").value(3))
+                                .andExpect(jsonPath("$.content.length()").value(5))
+                                .andExpect(jsonPath("$.content[0].description").value("Item 6"))
+                                .andExpect(jsonPath("$.content[4].description").value("Item 2"));
+                mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
+                                .param("page", "2").param("size", "5"))
+                                .andExpect(jsonPath("$.content.length()").value(2));
+                mvc.perform(get("/api/transactions/search").with(user("maria@example.com"))
+                                .param("accountId", account.getId().toString()).param("userId", owner.toString()))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalElements").value(0))
+                                .andExpect(jsonPath("$.content").isEmpty());
+        }
+
+        @Test
+        void shouldTreatSearchWildcardsAsLiteralText() throws Exception {
+                save(owner, account, food, "1.00", "2026-02-01", "Taxa 10%_extra");
+                save(owner, account, food, "1.00", "2026-02-01", "Taxa 100 extra");
+                mvc.perform(get("/api/transactions/search").with(user("arthur@example.com")).param("query", "%_"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalElements").value(1))
+                                .andExpect(jsonPath("$.content[0].description").value("Taxa 10%_extra"));
+        }
+
+        @Test
+        void shouldValidateFiltersMonthAndAuthentication() throws Exception {
+                for (String[] param : new String[][] { { "page", "-1" }, { "size", "0" }, { "size", "101" },
+                                { "accountId", "0" }, { "categoryId", "-1" }, { "type", "OTHER" },
+                                { "from", "invalid" }, { "query", "a".repeat(101) } }) {
+                        mvc.perform(get("/api/transactions/search").with(user("arthur@example.com")).param(param[0],
+                                        param[1]))
+                                        .andExpect(status().isBadRequest());
+                }
+                mvc.perform(get("/api/transactions/search").with(user("arthur@example.com"))
+                                .param("from", "2026-03-01").param("to", "2026-02-01"))
+                                .andExpect(status().isBadRequest());
+                for (String month : new String[] { "2026-13", "invalid", "0000-01" }) {
+                        mvc.perform(get("/api/overview").with(user("arthur@example.com")).param("month", month))
+                                        .andExpect(status().isBadRequest());
+                }
+                mvc.perform(get("/api/overview").with(user("arthur@example.com"))).andExpect(status().isBadRequest());
+                mvc.perform(get("/api/overview").param("month", "2026-02")).andExpect(status().isUnauthorized());
+                mvc.perform(get("/api/transactions/search")).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void shouldFilterMonthlyTotalsAndCurrentBalanceByAccount() throws Exception {
+                save(owner, account, income, "200.10", "2026-02-01", "Salario");
+                save(owner, account, food, "20.00", "2026-02-15", "Mercado");
+                save(owner, account, transport, "30.05", "2026-02-28", "Onibus");
+                save(owner, account, income, "10.00", "2026-01-31", "Anterior");
+                save(owner, account, income, "5.00", "2026-03-01", "Posterior");
+                save(owner, bank, income, "1000.00", "2026-02-01", "Outra conta");
+                save(owner, bank, food, "40.00", "2026-02-15", "Outra compra");
+                mvc.perform(get("/api/overview").param("month", "2026-02")
+                                .param("accountId", account.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalBalance").value("265.05"))
+                                .andExpect(jsonPath("$.accountCount").value(1))
+                                .andExpect(jsonPath("$.income").value("200.10"))
+                                .andExpect(jsonPath("$.expense").value("50.05"))
+                                .andExpect(jsonPath("$.result").value("150.05"))
+                                .andExpect(jsonPath("$.transactionCount").value(3))
+                                .andExpect(jsonPath("$.days.length()").value(3))
+                                .andExpect(jsonPath("$.days[0].income").value("200.10"))
+                                .andExpect(jsonPath("$.categories.length()").value(2))
+                                .andExpect(jsonPath("$.categories[0].amount").value("30.05"))
+                                .andExpect(jsonPath("$.categories[1].amount").value("20.00"));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalBalance").value("1250.05"))
+                                .andExpect(jsonPath("$.accountCount").value(2))
+                                .andExpect(jsonPath("$.income").value("1200.10"))
+                                .andExpect(jsonPath("$.expense").value("90.05"));
+        }
+
+        @Test
+        void shouldKeepAccountBalanceWhenSelectedMonthIsEmpty() throws Exception {
+                save(owner, bank, food, "50.00", "2026-01-01", "Mes anterior");
+                mvc.perform(get("/api/overview").param("month", "2026-02")
+                                .param("accountId", bank.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalBalance").value("-25.00"))
+                                .andExpect(jsonPath("$.accountCount").value(1))
+                                .andExpect(jsonPath("$.income").value("0.00"))
+                                .andExpect(jsonPath("$.expense").value("0.00"))
+                                .andExpect(jsonPath("$.result").value("0.00"))
+                                .andExpect(jsonPath("$.transactionCount").value(0))
+                                .andExpect(jsonPath("$.days").isEmpty())
+                                .andExpect(jsonPath("$.categories").isEmpty());
+        }
+
+        @Test
+        void shouldRejectUnknownForeignAndInvalidAccounts() throws Exception {
+                for (String id : new String[] { account.getId().toString(), "9223372036854775807" }) {
+                        mvc.perform(get("/api/overview").param("month", "2026-02").param("accountId", id)
+                                        .param("userId", owner.toString()).with(user("maria@example.com")))
+                                        .andExpect(status().isNotFound());
+                }
+                for (String id : new String[] { "0", "-1", "abc", "9223372036854775808" }) {
+                        mvc.perform(get("/api/overview").param("month", "2026-02").param("accountId", id)
+                                        .with(user("arthur@example.com"))).andExpect(status().isBadRequest());
+                }
+        }
+
+        @Test
+        void shouldKeepBudgetsGlobalWhenFilteringAnAccount() throws Exception {
+                save(owner, account, food, "20.00", "2026-02-01", "Carteira");
+                save(owner, bank, food, "40.00", "2026-02-01", "Banco");
+                budgetService.save("arthur@example.com", food.getId(),
+                                new BudgetRequest(YearMonth.of(2026, 2), new BigDecimal("100.00")));
+                mvc.perform(get("/api/overview").param("month", "2026-02")
+                                .param("accountId", account.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.expense").value("20.00"))
+                                .andExpect(jsonPath("$.budgets[0].spent").value("60.00"))
+                                .andExpect(jsonPath("$.budgets[0].remaining").value("40.00"));
+        }
+
+        private void save(Long userId, Account account, Category category, String amount, String date,
+                        String description) {
+                var request = new CreateTransactionRequest(account.getId(), category.getId(), description,
+                                new BigDecimal(amount), LocalDate.parse(date));
+                transactions.save(new Transaction(userId, account, category, request));
+        }
 }

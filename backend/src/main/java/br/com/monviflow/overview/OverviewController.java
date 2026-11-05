@@ -16,7 +16,8 @@ public class OverviewController {
 
     @GetMapping
     public OverviewResponse get(Authentication auth,
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return service.get(auth.getName(), month);
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
+            @RequestParam(required = false) Long accountId) {
+        return service.get(auth.getName(), month, accountId);
     }
 }
