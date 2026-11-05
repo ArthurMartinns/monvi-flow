@@ -6,14 +6,17 @@ import TransactionsPage from "./features/transactions/TransactionsPage";
 import OverviewPage from "./features/overview/OverviewPage";
 import Sidebar from "./components/Sidebar";
 import BudgetsPage from "./features/budgets/BudgetsPage";
+import SettingsPage from "./features/settings/SettingsPage";
 import { currentUser, logout } from "./lib/auth";
 import type { User } from "./lib/auth";
 
 function pageFromHash() {
-  if (window.location.hash === "#orcamentos") return "budgets";
-  if (window.location.hash === "#movimentacoes") return "transactions";
-  if (window.location.hash === "#categorias") return "categories";
-  return window.location.hash === "#contas" ? "accounts" : "overview";
+  const path = window.location.hash.split("?")[0];
+  if (path === "#configuracoes") return "settings";
+  if (path === "#orcamentos") return "budgets";
+  if (path === "#movimentacoes") return "transactions";
+  if (path === "#categorias") return "categories";
+  return path === "#contas" ? "accounts" : "overview";
 }
 
 function App() {
@@ -25,7 +28,11 @@ function App() {
   const [logoutError, setLogoutError] = useState("");
   const [menuOpen, setMenuOpen] = useState(true);
   const [page, setPage] = useState(pageFromHash);
-  const clearSession = useCallback(() => setUser(null), []);
+  const clearSession = useCallback(() => {
+    setUser(null);
+    history.replaceState(null, "", "#inicio");
+    setPage("overview");
+  }, []);
 
   useEffect(() => {
     function changePage() {
@@ -40,7 +47,7 @@ function App() {
     setLogoutError("");
     try {
       await logout();
-      setUser(null);
+      clearSession();
     } catch (error) {
       setLogoutError(
         error instanceof Error ? error.message : "Não foi possível sair.",
@@ -52,8 +59,6 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     currentUser(controller.signal)
       .then((user) => {
         if (!controller.signal.aborted) setUser(user);
@@ -99,7 +104,7 @@ function App() {
             </p>
             <button
               type="button"
-              onClick={() => setAttempt((value) => value + 1)}
+              onClick={() => { setLoading(true); setError(""); setAttempt((value) => value + 1); }}
               className="mt-6 cursor-pointer rounded-xl bg-emerald-900 px-5 py-3 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800"
             >
               Tentar novamente
@@ -107,6 +112,8 @@ function App() {
           </section>
         ) : !user ? (
           <AuthForm onLogin={setUser} />
+        ) : page === "settings" ? (
+          <SettingsPage key={user.id} user={user} onUpdated={(updated) => setUser((current) => current?.id === updated.id ? updated : current)} onSessionExpired={clearSession} />
         ) : page === "categories" ? (
           <CategoriesPage key={user.id} onSessionExpired={clearSession} />
         ) : page === "transactions" ? (

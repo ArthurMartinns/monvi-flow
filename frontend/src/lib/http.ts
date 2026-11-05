@@ -74,9 +74,10 @@ export async function send<T>(
   path: string,
   body?: string,
   contentType = "application/json",
+  signal?: AbortSignal,
 ): Promise<T> {
   const csrf = await request<{ token: string; headerName: string }>(
-    "/api/auth/csrf",
+    "/api/auth/csrf", { signal },
   );
   return request<T>(path, {
     method,
@@ -85,5 +86,6 @@ export async function send<T>(
       [csrf.headerName]: csrf.token,
     },
     body,
+    signal,
   });
 }

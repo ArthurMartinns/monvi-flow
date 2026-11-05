@@ -6,6 +6,7 @@ const items = [
   { id: "categories", href: "#categorias", label: "Categorias", path: "M3 3h8l10 10-8 8L3 11zM7 7h.01" },
   { id: "transactions", href: "#movimentacoes", label: "Movimentações", path: "M7 3v18m-4-4 4 4 4-4M17 21V3m-4 4 4-4 4 4" },
   { id: "budgets", href: "#orcamentos", label: "Orçamentos", path: "M21 12a9 9 0 1 1-9-9M17 12a5 5 0 1 1-5-5M12 12l9-9M17 3h4v4" },
+  { id: "settings", href: "#configuracoes", label: "Configurações", path: "M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6" },
 ];
 
 type Props = { page: string; expanded: boolean; onToggle: () => void; name: string; onLogout: () => void; signingOut: boolean };

@@ -1,4 +1,4 @@
-import { ApiError, request, post } from "./http.ts";
+import { ApiError, request, post, send } from "./http.ts";
 export { ApiError } from "./http.ts";
 
 export type User = {
@@ -50,4 +50,8 @@ export function logout() {
     "",
     "application/x-www-form-urlencoded",
   );
+}
+
+export function updateProfile(name: string, signal?: AbortSignal) {
+  return send<User>("PATCH", "/api/users/me", JSON.stringify({ name }), "application/json", signal);
 }
