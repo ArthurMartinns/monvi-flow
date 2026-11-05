@@ -61,8 +61,6 @@ export default function AccountsPage({ onSessionExpired }: Props) {
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setListError("");
     listAccounts(controller.signal)
       .then((accounts) => {
         if (!controller.signal.aborted) setAccounts(accounts);
@@ -89,12 +87,14 @@ export default function AccountsPage({ onSessionExpired }: Props) {
     if (!modal || !dialog) return;
     dialog.showModal();
     const previousOverflow = document.body.style.overflow;
+    const trigger = triggerRef.current;
+    const page = pageRef.current;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
       dialog.close();
-      if (triggerRef.current?.isConnected) triggerRef.current.focus();
-      else pageRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      if (trigger?.isConnected) trigger.focus();
+      else page?.querySelector<HTMLButtonElement>("button")?.focus();
     };
   }, [modal]);
 
@@ -351,7 +351,7 @@ export default function AccountsPage({ onSessionExpired }: Props) {
             </p>
             <button
               type="button"
-              onClick={() => setAttempt((value) => value + 1)}
+              onClick={() => { setLoading(true); setListError(""); setAttempt((value) => value + 1); }}
               className={
                 "mt-5 inline-flex min-h-11 w-auto cursor-pointer items-center justify-center rounded-xl border border-transparent bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c]"
               }
