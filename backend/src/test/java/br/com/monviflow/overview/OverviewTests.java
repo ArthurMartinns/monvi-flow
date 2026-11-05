@@ -37,6 +37,8 @@ class OverviewTests extends PostgresIntegrationTest {
         private BudgetRepository budgets;
         @Autowired
         private BudgetService budgetService;
+        @Autowired
+        private TransactionService transactionService;
         private Long owner;
         private Account account;
         private Account bank;
@@ -256,10 +258,92 @@ class OverviewTests extends PostgresIntegrationTest {
                                 .andExpect(jsonPath("$.budgets[0].remaining").value("40.00"));
         }
 
-        private void save(Long userId, Account account, Category category, String amount, String date,
+        @Test
+        void shouldCompareSixMonthsWithZerosAndExactAmounts() throws Exception {
+                save(owner, account, income, "100.10", "2025-09-01", "Primeiro mes");
+                save(owner, account, food, "99999999999999999.99", "2025-12-31", "Dezembro");
+                save(owner, account, food, "0.01", "2025-12-01", "Centavo");
+                save(owner, account, income, "12.34", "2026-02-28", "Mes escolhido");
+                save(owner, bank, income, "50.00", "2026-02-01", "Outra conta");
+                save(owner, account, income, "999.00", "2025-08-31", "Antes da janela");
+                save(owner, account, income, "999.00", "2026-03-01", "Depois da janela");
+                mvc.perform(get("/api/overview").param("month", "2026-02")
+                                .param("accountId", account.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.months.length()").value(6))
+                                .andExpect(jsonPath("$.months[0].month").value("2025-09"))
+                                .andExpect(jsonPath("$.months[0].income").value("100.10"))
+                                .andExpect(jsonPath("$.months[1].month").value("2025-10"))
+                                .andExpect(jsonPath("$.months[1].income").value("0.00"))
+                                .andExpect(jsonPath("$.months[1].expense").value("0.00"))
+                                .andExpect(jsonPath("$.months[3].expense").value("100000000000000000.00"))
+                                .andExpect(jsonPath("$.months[3].result").value("-100000000000000000.00"))
+                                .andExpect(jsonPath("$.months[5].month").value("2026-02"))
+                                .andExpect(jsonPath("$.months[5].income").value("12.34"));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(jsonPath("$.months[5].income").value("62.34"));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("maria@example.com")))
+                                .andExpect(jsonPath("$.months[0].income").value("0.00"))
+                                .andExpect(jsonPath("$.months[3].expense").value("0.00"))
+                                .andExpect(jsonPath("$.months[5].income").value("0.00"));
+        }
+
+        @Test
+        void shouldReturnOnlyFiveRecentTransactionsInStableOrder() throws Exception {
+                for (int index = 0; index < 8; index++)
+                        save(owner, account, food, "1.00", "2026-02-15", "Item " + index);
+                save(owner, account, food, "2.00", "2026-02-01", "Mais antiga");
+                save(owner, account, food, "2.00", "2026-03-01", "Outro mes");
+                save(owner, bank, income, "5.00", "2026-02-28", "Outra conta");
+                mvc.perform(get("/api/overview").param("month", "2026-02")
+                                .param("accountId", account.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.recentTransactions.length()").value(5))
+                                .andExpect(jsonPath("$.recentTransactions[0].description").value("Item 7"))
+                                .andExpect(jsonPath("$.recentTransactions[4].description").value("Item 3"))
+                                .andExpect(jsonPath("$.recentTransactions[0].accountName").value("Carteira"))
+                                .andExpect(jsonPath("$.recentTransactions[0].categoryName").value("Alimentacao"));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(jsonPath("$.recentTransactions[0].description").value("Outra conta"));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("maria@example.com")))
+                                .andExpect(jsonPath("$.recentTransactions").isEmpty());
+        }
+
+        @Test
+        void shouldRefreshHistoryAndRecentTransactionsAfterChanges() throws Exception {
+                var transaction = save(owner, account, food, "10.00", "2026-02-15", "Original");
+                transactionService.update("arthur@example.com", transaction.getId(),
+                                new CreateTransactionRequest(bank.getId(), income.getId(), "Alterado",
+                                                new BigDecimal("25.90"), LocalDate.of(2026, 3, 1)));
+                mvc.perform(get("/api/overview").param("month", "2026-02").with(user("arthur@example.com")))
+                                .andExpect(jsonPath("$.months[5].expense").value("0.00"))
+                                .andExpect(jsonPath("$.recentTransactions").isEmpty());
+                mvc.perform(get("/api/overview").param("month", "2026-03")
+                                .param("accountId", bank.getId().toString()).with(user("arthur@example.com")))
+                                .andExpect(jsonPath("$.months[5].income").value("25.90"))
+                                .andExpect(jsonPath("$.recentTransactions[0].description").value("Alterado"));
+                transactionService.delete("arthur@example.com", transaction.getId());
+                mvc.perform(get("/api/overview").param("month", "2026-03").with(user("arthur@example.com")))
+                                .andExpect(jsonPath("$.months[5].income").value("0.00"))
+                                .andExpect(jsonPath("$.recentTransactions").isEmpty());
+        }
+
+        @Test
+        void shouldHandleEmptyHistoryAndCalendarLimits() throws Exception {
+                for (String month : new String[] { "0001-01", "9999-12", "2026-02" }) {
+                        mvc.perform(get("/api/overview").param("month", month).with(user("arthur@example.com")))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.months.length()").value(month.equals("0001-01") ? 1 : 6))
+                                        .andExpect(jsonPath("$.months[0].income").value("0.00"))
+                                        .andExpect(jsonPath("$.months[0].result").value("0.00"))
+                                        .andExpect(jsonPath("$.recentTransactions").isEmpty());
+                }
+        }
+
+        private Transaction save(Long userId, Account account, Category category, String amount, String date,
                         String description) {
                 var request = new CreateTransactionRequest(account.getId(), category.getId(), description,
                                 new BigDecimal(amount), LocalDate.parse(date));
-                transactions.save(new Transaction(userId, account, category, request));
+                return transactions.save(new Transaction(userId, account, category, request));
         }
 }

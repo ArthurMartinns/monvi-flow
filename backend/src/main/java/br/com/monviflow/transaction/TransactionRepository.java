@@ -50,6 +50,33 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long>,
       """, nativeQuery = true)
   List<CategoryTotal> expenseTotals(Long userId, LocalDate from, LocalDate until, @Nullable Long accountId);
 
+  @Query(value = """
+      SELECT CAST(date_trunc('month', t.date) AS date) AS month,
+             SUM(CASE WHEN c.type = 'INCOME' THEN t.amount ELSE 0 END) AS income,
+             SUM(CASE WHEN c.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expense
+      FROM financial_transaction t JOIN category c ON c.id = t.category_id
+      WHERE t.user_id = :userId AND t.date >= :from AND t.date < :until
+        AND (CAST(:accountId AS bigint) IS NULL OR t.account_id = :accountId)
+      GROUP BY date_trunc('month', t.date) ORDER BY month
+      """, nativeQuery = true)
+  List<MonthlyTotal> monthlyTotals(Long userId, LocalDate from, LocalDate until, @Nullable Long accountId);
+
+  @EntityGraph(attributePaths = { "account", "category" })
+  @Query("""
+      SELECT t FROM Transaction t WHERE t.userId = :userId AND t.date >= :from AND t.date < :until
+          AND (:accountId IS NULL OR t.account.id = :accountId)
+      ORDER BY t.date DESC, t.id DESC
+      """)
+  List<Transaction> recent(Long userId, LocalDate from, LocalDate until, @Nullable Long accountId, Pageable pageable);
+
+  interface MonthlyTotal {
+    LocalDate getMonth();
+
+    BigDecimal getIncome();
+
+    BigDecimal getExpense();
+  }
+
   interface DailyTotal {
     LocalDate getDay();
 
