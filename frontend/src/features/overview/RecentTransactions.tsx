@@ -4,9 +4,11 @@ import { formatMoney } from "../../lib/money";
 export default function RecentTransactions({
   items,
   monthLabel,
+  href,
 }: {
   items: Transaction[];
   monthLabel: string;
+  href: string;
 }) {
   return (
     <section className="min-w-0 rounded-lg border border-line bg-white">
@@ -18,7 +20,7 @@ export default function RecentTransactions({
           </p>
         </div>
         <a
-          href="#movimentacoes"
+          href={href}
           className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent"
         >
           Ver todas

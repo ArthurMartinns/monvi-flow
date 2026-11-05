@@ -7,6 +7,7 @@ import { listCategories } from "../../lib/categories";
 import type { Category, CategoryType } from "../../lib/categories";
 import { ApiError } from "../../lib/http";
 import { formatMoney, parseBalance } from "../../lib/money";
+import { readTransactionFilters, transactionsHref } from "../../lib/navigation";
 import {
   createTransaction,
   deleteTransaction,
@@ -41,10 +42,7 @@ export default function TransactionsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [filters, setFilters] = useState<TransactionFilters>({
-    page: 0,
-    size: 20,
-  });
+  const [filters, setFilters] = useState<TransactionFilters>(readTransactionFilters);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
   const [filterError, setFilterError] = useState("");
@@ -61,6 +59,23 @@ export default function TransactionsPage({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    history.replaceState(null, "", transactionsHref(readTransactionFilters()));
+    function restoreFilters() {
+      if (window.location.hash.split("?")[0] !== "#movimentacoes") return;
+      setLoading(true);
+      setError("");
+      setFilterError("");
+      setNotice("");
+      setModal(null);
+      const next = readTransactionFilters();
+      history.replaceState(null, "", transactionsHref(next));
+      setFilters(next);
+    }
+    window.addEventListener("hashchange", restoreFilters);
+    return () => window.removeEventListener("hashchange", restoreFilters);
+  }, []);
 
   useEffect(() => () => exportRef.current?.abort(), []);
 
@@ -93,6 +108,7 @@ export default function TransactionsPage({
 
   useEffect(() => {
     const controller = new AbortController();
+    let correctedPage = false;
     Promise.all([
       searchTransactions(filters, controller.signal),
       listAccounts(controller.signal),
@@ -101,10 +117,13 @@ export default function TransactionsPage({
       .then(([result, accounts, categories]) => {
         if (controller.signal.aborted) return;
         if (result.page > 0 && result.page >= result.totalPages) {
-          setFilters((filters) => ({
+          correctedPage = true;
+          const next = {
             ...filters,
             page: Math.max(0, result.totalPages - 1),
-          }));
+          };
+          history.replaceState(null, "", transactionsHref(next));
+          setFilters(next);
           return;
         }
         setTransactions(result.content);
@@ -127,7 +146,7 @@ export default function TransactionsPage({
           );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && !correctedPage) setLoading(false);
       });
     return () => controller.abort();
   }, [attempt, filters, onSessionExpired]);
@@ -142,6 +161,9 @@ export default function TransactionsPage({
     setLoading(true);
     setError("");
     setNotice("");
+    setFilterError("");
+    const href = transactionsHref(next);
+    if (window.location.hash !== href) history.pushState(null, "", href);
     setFilters(next);
   }
 
@@ -188,9 +210,9 @@ export default function TransactionsPage({
     returnFocusRef.current = trigger;
     setType(
       next.action === "create"
-        ? categories.some((category) => category.type === "EXPENSE")
+        ? filters.type || (categories.some((category) => category.type === "EXPENSE")
           ? "EXPENSE"
-          : "INCOME"
+          : "INCOME")
         : next.transaction.type,
     );
     setFormError("");
@@ -345,6 +367,7 @@ export default function TransactionsPage({
         })()}</span>
       </summary>
       <form
+        key={`${transactionsHref(filters)}:${accounts.map((account) => account.id).join(",")}:${categories.map((category) => category.id).join(",")}`}
         ref={filterFormRef}
         onSubmit={applyFilters}
         aria-label="Filtrar movimentações"
@@ -355,6 +378,7 @@ export default function TransactionsPage({
             Buscar descrição
             <input
               name="query"
+              defaultValue={filters.query ?? ""}
               type="search"
               maxLength={100}
               placeholder="Ex.: mercado"
@@ -365,18 +389,20 @@ export default function TransactionsPage({
             De
             <input
               name="from"
+              defaultValue={filters.from ?? ""}
               type="date"
               className={`${inputClass} min-w-0`}
             />
           </label>
           <label className="text-xs font-medium text-muted">
             Até
-            <input name="to" type="date" className={`${inputClass} min-w-0`} />
+            <input name="to" type="date" defaultValue={filters.to ?? ""} className={`${inputClass} min-w-0`} />
           </label>
           <label className="text-xs font-medium text-muted">
             Conta
-            <select name="filterAccount" defaultValue="" className={inputClass}>
+            <select name="filterAccount" defaultValue={filters.accountId ?? ""} className={inputClass}>
               <option value="">Todas as contas</option>
+              {filters.accountId && !accounts.some((account) => String(account.id) === filters.accountId) && <option value={filters.accountId}>Conta indisponível</option>}
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
@@ -386,7 +412,7 @@ export default function TransactionsPage({
           </label>
           <label className="text-xs font-medium text-muted">
             Tipo
-            <select name="filterType" defaultValue="" className={inputClass}>
+            <select name="filterType" defaultValue={filters.type ?? ""} className={inputClass}>
               <option value="">Receitas e despesas</option>
               <option value="INCOME">Receita</option>
               <option value="EXPENSE">Despesa</option>
@@ -396,10 +422,11 @@ export default function TransactionsPage({
             Categoria
             <select
               name="filterCategory"
-              defaultValue=""
+              defaultValue={filters.categoryId ?? ""}
               className={inputClass}
             >
               <option value="">Todas as categorias</option>
+              {filters.categoryId && !categories.some((category) => String(category.id) === filters.categoryId) && <option value={filters.categoryId}>Categoria indisponível</option>}
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -457,20 +484,10 @@ export default function TransactionsPage({
         <>
           {!canCreate && (
             <p className="mt-5 rounded-lg bg-[#f1f3ee] p-5 leading-relaxed text-[#705139]">
-              Para registrar movimentações, cadastre uma{" "}
-              <a
-                href="#contas"
-                className="font-semibold underline underline-offset-4"
-              >
-                conta
-              </a>{" "}
-              e uma{" "}
-              <a
-                href="#categorias"
-                className="font-semibold underline underline-offset-4"
-              >
-                categoria
-              </a>
+              Para registrar movimentações, cadastre{" "}
+              {accounts.length === 0 && <a href="#contas" className="font-semibold underline underline-offset-4">uma conta</a>}
+              {accounts.length === 0 && categories.length === 0 && " e "}
+              {categories.length === 0 && <a href="#categorias" className="font-semibold underline underline-offset-4">uma categoria</a>}
               .
             </p>
           )}
@@ -715,7 +732,7 @@ export default function TransactionsPage({
                     id="transaction-account"
                     name="accountId"
                     required
-                    defaultValue={selected?.accountId ?? ""}
+                    defaultValue={selected?.accountId ?? (accounts.some((account) => String(account.id) === filters.accountId) ? filters.accountId : "")}
                     aria-invalid={fields.includes("accountId")}
                     className={inputClass}
                   >
@@ -740,7 +757,7 @@ export default function TransactionsPage({
                     name="categoryId"
                     required
                     defaultValue={
-                      selected?.type === type ? selected.categoryId : ""
+                      selected?.type === type ? selected.categoryId : availableCategories.some((category) => String(category.id) === filters.categoryId) ? filters.categoryId : ""
                     }
                     aria-invalid={fields.includes("categoryId")}
                     className={inputClass}

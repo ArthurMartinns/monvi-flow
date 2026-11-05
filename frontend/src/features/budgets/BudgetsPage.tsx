@@ -7,6 +7,7 @@ import type { Category } from "../../lib/categories";
 import { ApiError } from "../../lib/http";
 import { formatMoney, parseBalance } from "../../lib/money";
 import { budgetProgress } from "./budgetProgress";
+import { budgetsHref, readOverviewScope } from "../../lib/navigation";
 
 const buttonClass =
   "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0b624d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#004d3c] disabled:cursor-not-allowed disabled:opacity-50";
@@ -21,10 +22,7 @@ export default function BudgetsPage({
 }: {
   onSessionExpired: () => void;
 }) {
-  const [month, setMonth] = useState(() => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [month, setMonth] = useState(() => readOverviewScope().month);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +35,20 @@ export default function BudgetsPage({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const createRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    function restoreMonth() {
+      if (window.location.hash.split("?")[0] !== "#orcamentos") return;
+      setLoading(true);
+      setError("");
+      setNotice("");
+      setModal(null);
+      setMonth(readOverviewScope().month);
+      setAttempt((value) => value + 1);
+    }
+    window.addEventListener("hashchange", restoreMonth);
+    return () => window.removeEventListener("hashchange", restoreMonth);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,6 +97,7 @@ export default function BudgetsPage({
   }, [modal]);
 
   function openModal(next: Modal, button: HTMLButtonElement) {
+    if (saving) return;
     triggerRef.current = button;
     setFormError("");
     setNotice("");
@@ -121,20 +134,15 @@ export default function BudgetsPage({
     try {
       if (modal.action === "delete") {
         await deleteBudget(modal.budget.id);
-        setBudgets((items) =>
-          items.filter((item) => item.id !== modal.budget.id),
-        );
-        setNotice("Orçamento removido. As movimentações foram preservadas.");
+        setNotice(`Orçamento de ${month.split("-").reverse().join("/")} removido. As movimentações foram preservadas.`);
       } else {
-        const budget = await saveBudget(categoryId, month, limitAmount);
-        setBudgets((items) =>
-          [...items.filter((item) => item.id !== budget.id), budget].sort(
-            (a, b) => a.categoryName.localeCompare(b.categoryName, "pt-BR"),
-          ),
-        );
-        setNotice("Limite mensal salvo.");
+        await saveBudget(categoryId, month, limitAmount);
+        setNotice(`Limite salvo para ${month.split("-").reverse().join("/")}.`);
       }
       setModal(null);
+      setLoading(true);
+      setError("");
+      setAttempt((value) => value + 1);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) onSessionExpired();
       else
@@ -186,6 +194,8 @@ export default function BudgetsPage({
                 setError("");
                 setNotice("");
                 setMonth(event.target.value);
+                const href = budgetsHref(event.target.value);
+                if (window.location.hash !== href) history.pushState(null, "", href);
               }}
               className="mt-2 block h-11 rounded-xl border border-control bg-white px-3 text-sm text-ink outline-none focus:border-[#004d3c]"
             />
@@ -193,7 +203,7 @@ export default function BudgetsPage({
           <button
             ref={createRef}
             type="button"
-            disabled={loading || !!error || available.length === 0}
+            disabled={saving || loading || !!error || available.length === 0}
             onClick={(event) =>
               openModal({ action: "create" }, event.currentTarget)
             }

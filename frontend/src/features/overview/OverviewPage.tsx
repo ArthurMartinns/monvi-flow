@@ -9,11 +9,7 @@ import { cents, monthDays, percentage } from "./chartData";
 import CashFlowChart from "./CashFlowChart";
 import RecentTransactions from "./RecentTransactions";
 import { budgetProgress } from "../budgets/budgetProgress";
-
-const currentMonth = () => {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-};
+import { budgetsHref, overviewHref, readOverviewScope, transactionsHref } from "../../lib/navigation";
 
 const formatMonth = (month: string) =>
   new Intl.DateTimeFormat("pt-BR", {
@@ -26,14 +22,34 @@ export default function OverviewPage({
 }: {
   onSessionExpired: () => void;
 }) {
-  const [month, setMonth] = useState(currentMonth);
-  const [accountId, setAccountId] = useState("");
+  const [{ month, accountId }, setScope] = useState(readOverviewScope);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [chartPeriod, setChartPeriod] = useState<"day" | "month">("month");
+
+  useEffect(() => {
+    function restoreScope() {
+      const path = window.location.hash.split("?")[0];
+      if (path !== "#inicio" && path !== "") return;
+      setLoading(true);
+      setError("");
+      setScope(readOverviewScope());
+      setAttempt((value) => value + 1);
+    }
+    window.addEventListener("hashchange", restoreScope);
+    return () => window.removeEventListener("hashchange", restoreScope);
+  }, []);
+
+  function changeScope(month: string, accountId: string) {
+    setLoading(true);
+    setError("");
+    const href = overviewHref(month, accountId);
+    if (window.location.hash !== href) window.history.pushState(null, "", href);
+    setScope({ month, accountId });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -134,6 +150,8 @@ export default function OverviewPage({
         },
       ]
     : [];
+  const transactionScope = { from: `${month}-01`, to: monthDays(month).at(-1), accountId };
+  const transactionsLink = transactionsHref(transactionScope);
   return (
     <section className="mx-auto w-full max-w-[1200px] pt-8 pb-10 text-sm text-ink max-[600px]:pt-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -149,9 +167,7 @@ export default function OverviewPage({
             <select
               value={accountId}
               onChange={(event) => {
-                setLoading(true);
-                setError("");
-                setAccountId(event.target.value);
+                changeScope(month, event.target.value);
               }}
               className="mt-2 block h-11 w-full min-w-0 rounded-lg border border-control bg-white px-3 text-sm text-ink outline-none focus:border-accent"
             >
@@ -177,9 +193,7 @@ export default function OverviewPage({
                   event.target.value.startsWith("0000")
                 )
                   return;
-                setLoading(true);
-                setError("");
-                setMonth(event.target.value);
+                changeScope(event.target.value, accountId);
               }}
               className="mt-2 block h-11 w-full rounded-lg border border-control bg-white px-3 text-sm text-ink outline-none focus:border-accent"
             />
@@ -202,6 +216,7 @@ export default function OverviewPage({
           >
             Tentar novamente
           </button>
+          {accountId && <button type="button" onClick={() => changeScope(month, "")} className="ml-3 mt-4 min-h-11 cursor-pointer rounded-lg px-4 font-medium hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent">Ver todas as contas</button>}
         </div>
       ) : (
         data && (
@@ -297,12 +312,13 @@ export default function OverviewPage({
                     {data.categories.slice(0, 5).map((category, index) => (
                       <li key={category.id}>
                         <div className="flex items-baseline justify-between gap-4">
-                          <span
-                            className="min-w-0 truncate text-sm"
+                          <a
+                            href={transactionsHref({ ...transactionScope, categoryId: String(category.id), type: "EXPENSE" })}
+                            className="min-w-0 truncate rounded-sm text-sm hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                             title={category.name}
                           >
                             {category.name}
-                          </span>
+                          </a>
                           <span className="shrink-0 text-sm font-medium text-ink tabular-nums">
                             {formatMoney(category.amount)}
                           </span>
@@ -326,7 +342,7 @@ export default function OverviewPage({
                   <p className="mt-4 text-xs text-muted">
                     Mais {data.categories.length - 5} categorias ·{" "}
                     <a
-                      href="#movimentacoes"
+                      href={transactionsHref({ ...transactionScope, type: "EXPENSE" })}
                       className="font-medium text-ink underline underline-offset-4"
                     >
                       Consultar histórico
@@ -352,7 +368,7 @@ export default function OverviewPage({
                     </p>
                   </div>
                   <a
-                    href="#orcamentos"
+                    href={budgetsHref(month)}
                     className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent"
                   >
                     Ver orçamentos
@@ -412,6 +428,7 @@ export default function OverviewPage({
               <RecentTransactions
                 items={data.recentTransactions ?? []}
                 monthLabel={monthLabel}
+                href={transactionsLink}
               />
             </div>
             <div className="flex flex-wrap justify-between gap-3 text-sm">
@@ -435,7 +452,7 @@ export default function OverviewPage({
                 </svg>
               </a>
               <a
-                href="#movimentacoes"
+                href={transactionsLink}
                 className="inline-flex min-h-11 items-center rounded-lg bg-ink px-4 font-medium text-white transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
               >
                 Ver movimentações
