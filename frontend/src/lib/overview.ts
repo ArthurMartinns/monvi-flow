@@ -1,5 +1,6 @@
 import { request } from "./http.ts";
 import type { Budget } from "./budgets.ts";
+import type { Transaction } from "./transactions.ts";
 
 export type Overview = {
   month: string;
@@ -12,6 +13,8 @@ export type Overview = {
   days: { date: string; income: string; expense: string }[];
   categories: { id: number; name: string; amount: string }[];
   budgets: Budget[];
+  months: { month: string; income: string; expense: string; result: string }[];
+  recentTransactions: Transaction[];
 };
 
 export function getOverview(

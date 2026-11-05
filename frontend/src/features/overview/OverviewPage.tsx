@@ -6,13 +6,20 @@ import type { Overview } from "../../lib/overview";
 import { listAccounts } from "../../lib/accounts";
 import type { Account } from "../../lib/accounts";
 import { cents, monthDays, percentage } from "./chartData";
-import DailyChart from "./DailyChart";
+import CashFlowChart from "./CashFlowChart";
+import RecentTransactions from "./RecentTransactions";
 import { budgetProgress } from "../budgets/budgetProgress";
 
 const currentMonth = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
+
+const formatMonth = (month: string) =>
+  new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${month}-15T12:00:00`));
 
 export default function OverviewPage({
   onSessionExpired,
@@ -26,6 +33,7 @@ export default function OverviewPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [chartPeriod, setChartPeriod] = useState<"day" | "month">("month");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,10 +79,19 @@ export default function OverviewPage({
           },
       )
     : [];
-  const monthLabel = new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date(`${month}-15T12:00:00`));
+  const monthLabel = formatMonth(month);
+  const history = data?.months ?? [];
+  const monthlyRows = history.map((item) => ({
+    date: `${item.month}-01`,
+    income: item.income,
+    expense: item.expense,
+  }));
+  const historyLabel =
+    history.length > 1
+      ? `${formatMonth(history[0].month)} a ${formatMonth(history[history.length - 1].month)}`
+      : history.length === 1
+        ? formatMonth(history[0].month)
+        : "Sem histórico disponível.";
   const budgetAlerts = (data?.budgets ?? []).filter(
     (budget) => budgetProgress(budget).status !== "under",
   );
@@ -210,14 +227,35 @@ export default function OverviewPage({
             </section>
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
               <figure className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
-                <figcaption className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold">
-                      Movimento diário
-                    </h2>
-                    <p className="mt-1 text-xs text-muted">
-                      {data.transactionCount} movimentações em {monthLabel}
-                    </p>
+                <figcaption className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-semibold">
+                        Fluxo de caixa
+                      </h2>
+                      <p className="mt-1 text-xs text-muted">
+                        {chartPeriod === "month"
+                          ? historyLabel
+                          : `${data.transactionCount} ${data.transactionCount === 1 ? "movimentação" : "movimentações"} em ${monthLabel}`}
+                      </p>
+                    </div>
+                    <div
+                      role="group"
+                      aria-label="Visualização do fluxo de caixa"
+                      className="flex rounded-lg bg-canvas p-1"
+                    >
+                      {(["day", "month"] as const).map((period) => (
+                        <button
+                          key={period}
+                          type="button"
+                          aria-pressed={chartPeriod === period}
+                          onClick={() => setChartPeriod(period)}
+                          className={`min-h-11 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors sm:min-h-9 ${chartPeriod === period ? "bg-soft text-ink" : "text-muted hover:text-ink"} focus-visible:outline-2 focus-visible:outline-accent`}
+                        >
+                          {period === "month" ? "Mensal" : "Diário"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex gap-3 text-xs text-muted">
                     <span>
@@ -237,7 +275,10 @@ export default function OverviewPage({
                   </div>
                 </figcaption>
                 <div className="mt-5">
-                  <DailyChart days={days} />
+                  <CashFlowChart
+                    days={chartPeriod === "month" ? monthlyRows : days}
+                    monthly={chartPeriod === "month"}
+                  />
                 </div>
               </figure>
               <section className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
@@ -294,79 +335,85 @@ export default function OverviewPage({
                 )}
               </section>
             </div>
-            <section className="rounded-lg border border-line bg-white p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold">
-                    {accountId ? "Limites gerais do mês" : "Limites do mês"}
-                  </h2>
-                  <p className="mt-1 text-[13px] text-muted">
-                    {accountId && "Consideram todas as suas contas. "}
-                    {overBudget.length > 0
-                      ? `${overBudget.length} ${overBudget.length === 1 ? "categoria ultrapassou" : "categorias ultrapassaram"} o limite planejado.`
-                      : budgetAlerts.length > 0
-                        ? "Algumas categorias estão próximas do limite planejado."
-                        : "Acompanhe seus limites por categoria."}
-                  </p>
-                </div>
-                <a
-                  href="#orcamentos"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent"
-                >
-                  Ver orçamentos
-                  <svg
-                    aria-hidden="true"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)]">
+              <section className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold">
+                      {accountId ? "Limites gerais do mês" : "Limites do mês"}
+                    </h2>
+                    <p className="mt-1 text-[13px] text-muted">
+                      {accountId && "Consideram todas as suas contas. "}
+                      {overBudget.length > 0
+                        ? `${overBudget.length} ${overBudget.length === 1 ? "categoria ultrapassou" : "categorias ultrapassaram"} o limite planejado.`
+                        : budgetAlerts.length > 0
+                          ? "Algumas categorias estão próximas do limite planejado."
+                          : "Acompanhe seus limites por categoria."}
+                    </p>
+                  </div>
+                  <a
+                    href="#orcamentos"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-accent"
                   >
-                    <path d="m9 5 7 7-7 7" />
-                  </svg>
-                </a>
-              </div>
-              {priorityBudgets.length === 0 ? (
-                <p className="mt-4 text-sm text-muted">
-                  {data.budgets?.length
-                    ? "Os orçamentos estão abaixo de 80% do limite."
-                    : "Nenhum limite definido para este mês."}
-                </p>
-              ) : (
-                <ul className="mt-2 divide-y divide-line">
-                  {priorityBudgets.slice(0, 3).map((budget) => (
-                    <li
-                      key={budget.id}
-                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5"
+                    Ver orçamentos
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      <span className="min-w-0 text-sm font-medium sm:flex sm:items-center sm:gap-3">
-                        {budget.categoryName}
-                        <span
-                          className={`mt-1 block text-xs font-normal sm:mt-0 ${budgetProgress(budget).status === "over" ? "text-danger" : "text-muted"}`}
-                        >
-                          {budgetProgress(budget).label}
+                      <path d="m9 5 7 7-7 7" />
+                    </svg>
+                  </a>
+                </div>
+                {priorityBudgets.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted">
+                    {data.budgets?.length
+                      ? "Os orçamentos estão abaixo de 80% do limite."
+                      : "Nenhum limite definido para este mês."}
+                  </p>
+                ) : (
+                  <ul className="mt-2 divide-y divide-line">
+                    {priorityBudgets.slice(0, 5).map((budget) => (
+                      <li
+                        key={budget.id}
+                        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5"
+                      >
+                        <span className="min-w-0 text-sm font-medium sm:flex sm:items-center sm:gap-3">
+                          {budget.categoryName}
+                          <span
+                            className={`mt-1 block text-xs font-normal sm:mt-0 ${budgetProgress(budget).status === "over" ? "text-danger" : "text-muted"}`}
+                          >
+                            {budgetProgress(budget).label}
+                          </span>
                         </span>
-                      </span>
-                      <span className="text-right text-sm tabular-nums">
-                        {formatMoney(budget.spent)}{" "}
-                        <span className="text-xs text-muted">
-                          de {formatMoney(budget.limitAmount)}
+                        <span className="text-right text-sm tabular-nums">
+                          {formatMoney(budget.spent)}{" "}
+                          <span className="text-xs text-muted">
+                            de {formatMoney(budget.limitAmount)}
+                          </span>
                         </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {priorityBudgets.length > 3 && (
-                <p className="mt-2 text-xs text-muted">
-                  Mais {priorityBudgets.length - 3} categorias precisam de
-                  atenção.
-                </p>
-              )}
-            </section>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {priorityBudgets.length > 5 && (
+                  <p className="mt-2 text-xs text-muted">
+                    Mais {priorityBudgets.length - 5} categorias precisam de
+                    atenção.
+                  </p>
+                )}
+              </section>
+              <RecentTransactions
+                items={data.recentTransactions ?? []}
+                monthLabel={monthLabel}
+              />
+            </div>
             <div className="flex flex-wrap justify-between gap-3 text-sm">
               <a
                 href="#contas"
