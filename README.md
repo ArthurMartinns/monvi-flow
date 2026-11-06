@@ -13,6 +13,7 @@ frontend em React e TypeScript e banco PostgreSQL.
 - Orçamentos mensais por categoria e alertas de limite.
 - Configurações com dados da conta e alteração do nome.
 - Alteração de senha com confirmação da senha atual.
+- Consulta de saldos pelo bot do Telegram após vinculação da conta.
 
 Os filtros ficam na URL, permitindo atualizar a página, favoritar uma consulta e usar voltar/avançar
 sem perder o contexto. Os orçamentos consideram todas as contas do usuário.
@@ -49,6 +50,12 @@ npm run dev
 ```
 
 Acesse http://127.0.0.1:5173. O backend roda na porta 8080.
+
+## Bot do Telegram
+
+Na versão web, abra **Configurações → Telegram** e gere um código de vinculação. Em uma conversa privada com [@monviflowbot](https://t.me/monviflowbot), envie `/vincular CÓDIGO` usando o código exibido. Ele vale por 10 minutos e só pode ser usado uma vez.
+
+Depois, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Para interromper o acesso pelo Telegram, use **Desvincular** em Configurações. O bot responde apenas em conversas privadas e não registra movimentações.
 
 ## Verificações
 

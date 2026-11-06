@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError, changePassword, updateProfile } from "../../lib/auth";
 import type { User } from "../../lib/auth";
+import TelegramSettings from "./TelegramSettings";
 
 type Props = {
   user: User;
@@ -310,6 +311,7 @@ export default function SettingsPage({
             </p>
           </form>
         </section>
+        <TelegramSettings onSessionExpired={onSessionExpired} />
       </div>
     </section>
   );
