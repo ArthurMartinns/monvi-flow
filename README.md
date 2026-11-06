@@ -12,6 +12,7 @@ frontend em React e TypeScript e banco PostgreSQL.
 - Visão geral com filtros por conta e mês, gráficos diário/mensal e últimos lançamentos.
 - Orçamentos mensais por categoria e alertas de limite.
 - Configurações com dados da conta e alteração do nome.
+- Alteração de senha com confirmação da senha atual.
 
 Os filtros ficam na URL, permitindo atualizar a página, favoritar uma consulta e usar voltar/avançar
 sem perder o contexto. Os orçamentos consideram todas as contas do usuário.
@@ -66,22 +67,16 @@ npm run lint
 
 ## Demonstração local
 
-Com o backend iniciado, execute na raiz:
-
-```cmd
-powershell -ExecutionPolicy Bypass -File scripts/seed-demo.ps1
-```
-
-O script aceita somente um backend local e usa uma conta fictícia separada: `demo@monviflow.local`,
-senha `DemoLocal123!`. Cria três contas, movimentações do mês atual e anterior e dois orçamentos.
-Executá-lo novamente no mesmo mês não duplica os lançamentos de demonstração.
+Crie uma conta fictícia pela tela de cadastro. Use, por exemplo, o e-mail `demo@monviflow.local` e uma senha de demonstração. Depois, cadastre duas contas (como Conta corrente e Reserva), algumas categorias e movimentações nos meses atual e anterior. Crie orçamentos para duas categorias de despesa.
 
 Para apresentar: entre com a conta demo, alterne os gráficos diário/mensal, selecione uma conta,
 abra uma categoria para conferir as movimentações filtradas e exporte o CSV. Edite um lançamento
-e retorne à visão geral para conferir os novos valores. Em Configurações, altere o nome e confira o menu.
+e retorne à visão geral para conferir os novos valores. Em Configurações, altere o nome, confira o menu
+e experimente a alteração de senha. Os dados são gravados no banco local; para começar novamente,
+apague os dados da conta pela interface ou recrie o banco de desenvolvimento.
 
 ## Escopo da versão web
 
 Valores apenas em BRL, datas de movimentação sem horário e sem lançamentos futuros. O saldo é calculado
 a partir do saldo inicial e dos lançamentos. Contas e categorias com registros vinculados não podem
-ser excluídas. Nesta versão, Configurações permite alterar o nome; o e-mail de acesso permanece fixo.
+ser excluídas. Em Configurações, o e-mail de acesso permanece fixo.
