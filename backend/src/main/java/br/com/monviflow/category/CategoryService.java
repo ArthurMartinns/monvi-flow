@@ -1,6 +1,7 @@
 package br.com.monviflow.category;
 
 import br.com.monviflow.user.UserRepository;
+import br.com.monviflow.budget.BudgetRepository;
 import java.util.List;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,10 +16,12 @@ public class CategoryService {
 
     private final CategoryRepository categories;
     private final UserRepository users;
+    private final BudgetRepository budgets;
 
-    public CategoryService(CategoryRepository categories, UserRepository users) {
+    public CategoryService(CategoryRepository categories, UserRepository users, BudgetRepository budgets) {
         this.categories = categories;
         this.users = users;
+        this.budgets = budgets;
     }
 
     @Transactional
@@ -43,6 +46,7 @@ public class CategoryService {
     public void delete(String email, Long id) {
         Category category = find(email, id);
         try {
+            budgets.deleteByUserIdAndCategoryId(category.getUserId(), category.getId());
             categories.delete(category);
             categories.flush();
         } catch (DataIntegrityViolationException exception) {

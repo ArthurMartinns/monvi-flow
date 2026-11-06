@@ -33,6 +33,10 @@ public class Category {
         return id;
     }
 
+    public Long getUserId() {
+        return userId;
+    }
+
     public String getName() {
         return name;
     }

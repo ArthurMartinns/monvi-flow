@@ -137,6 +137,21 @@ class CategoryTests extends PostgresIntegrationTest {
     }
 
     @Test
+    void shouldDeleteCategoryWithoutTransactionsEvenWhenItHasBudget() throws Exception {
+        Category category = createCategory("arthur@example.com");
+        Long userId = users.findByEmail("arthur@example.com").orElseThrow().getId();
+        jdbc.update("INSERT INTO budget (user_id, category_id, month, limit_amount) VALUES (?, ?, ?, ?)",
+                userId, category.getId(), java.time.LocalDate.now().withDayOfMonth(1), new java.math.BigDecimal("100.00"));
+
+        mvc.perform(delete("/api/categories/{id}", category.getId())
+                .with(user("arthur@example.com")).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        assertEquals(0, categories.count());
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM budget WHERE category_id = ?", Integer.class, category.getId()));
+    }
+
+    @Test
     void shouldNotChangeAnotherUsersCategory() throws Exception {
         Category category = createCategory("maria@example.com");
         for (Long id : new Long[] {category.getId(), 0L}) {

@@ -7,6 +7,10 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.*;
 
 public interface BudgetRepository extends JpaRepository<Budget, Long> {
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM budget WHERE user_id = :userId AND category_id = :categoryId", nativeQuery = true)
+    int deleteByUserIdAndCategoryId(Long userId, Long categoryId);
+
     Optional<Budget> findByIdAndUserId(Long id, Long userId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
