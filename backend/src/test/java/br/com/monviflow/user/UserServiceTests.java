@@ -33,6 +33,32 @@ class UserServiceTests {
     private UserService userService;
 
     @Test
+    void shouldChangePasswordAfterVerifyingCurrentPassword() {
+        User user = new User("Arthur", "arthur@example.com", "old-hash");
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("SenhaAtual123", "old-hash")).thenReturn(true);
+        when(passwordEncoder.encode("SenhaNova123")).thenReturn("new-hash");
+
+        userService.changePassword(user.getEmail(), new ChangePasswordRequest("SenhaAtual123", "SenhaNova123"));
+
+        assertEquals("new-hash", user.getPasswordHash());
+        verify(passwordEncoder).encode("SenhaNova123");
+    }
+
+    @Test
+    void shouldRejectPasswordChangeWhenCurrentPasswordIsWrong() {
+        User user = new User("Arthur", "arthur@example.com", "old-hash");
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("SenhaErrada", "old-hash")).thenReturn(false);
+
+        assertThrows(InvalidCurrentPasswordException.class, () -> userService.changePassword(
+            user.getEmail(), new ChangePasswordRequest("SenhaErrada", "SenhaNova123")));
+
+        assertEquals("old-hash", user.getPasswordHash());
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
     void shouldCreateUser() {
         String password = " SenhaFicticia123! ";
         var request = new CreateUserRequest(

@@ -1,6 +1,7 @@
 package br.com.monviflow.shared;
 
 import br.com.monviflow.user.EmailAlreadyRegisteredException;
+import br.com.monviflow.user.InvalidCurrentPasswordException;
 import br.com.monviflow.account.AccountInUseException;
 import br.com.monviflow.category.CategoryInUseException;
 import org.hibernate.exception.ConstraintViolationException;
@@ -28,6 +29,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(EmailAlreadyRegisteredException.class)
     public ProblemDetail handleDuplicateEmail(EmailAlreadyRegisteredException exception) {
         return problem(HttpStatus.CONFLICT, "E-mail já cadastrado", exception.getMessage());
+    }
+
+    @ExceptionHandler(InvalidCurrentPasswordException.class)
+    public ProblemDetail handleInvalidCurrentPassword(InvalidCurrentPasswordException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "Senha atual incorreta", exception.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

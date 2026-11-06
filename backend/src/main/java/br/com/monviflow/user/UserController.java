@@ -30,4 +30,10 @@ public class UserController {
     public UserResponse updateProfile(Authentication auth, @Valid @RequestBody UpdateProfileRequest request) {
         return userService.updateProfile(auth.getName(), request);
     }
+
+    @org.springframework.web.bind.annotation.PatchMapping("/me/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(Authentication auth, @Valid @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(auth.getName(), request);
+    }
 }
