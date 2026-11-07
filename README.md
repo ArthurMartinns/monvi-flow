@@ -55,7 +55,26 @@ Acesse http://127.0.0.1:5173. O backend roda na porta 8080.
 
 Na versão web, abra **Configurações → Telegram** e gere um código de vinculação. Em uma conversa privada com [@monviflowbot](https://t.me/monviflowbot), envie `/vincular CÓDIGO` usando o código exibido. Ele vale por 10 minutos e só pode ser usado uma vez.
 
-Depois, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Para interromper o acesso pelo Telegram, use **Desvincular** em Configurações. O bot responde apenas em conversas privadas e não registra movimentações.
+Depois de vincular, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Para registrar uma movimentação, use um destes formatos:
+
+```text
+/despesa VALOR ID_DA_CONTA ID_DA_CATEGORIA DESCRIÇÃO
+/receita VALOR ID_DA_CONTA ID_DA_CATEGORIA DESCRIÇÃO
+```
+
+Os campos são separados por espaços e devem aparecer nesta ordem:
+
+| Campo | O que informar |
+| --- | --- |
+| `/despesa` ou `/receita` | Escolha `/despesa` para uma saída de dinheiro ou `/receita` para uma entrada. |
+| `VALOR` | Valor positivo em reais, com até duas casas decimais. Aceita vírgula ou ponto, como `25,90`. |
+| `ID_DA_CONTA` | Número da conta em que o dinheiro saiu ou entrou. Envie `/contas` ao bot para ver os IDs das suas contas. |
+| `ID_DA_CATEGORIA` | Número da categoria do lançamento. Envie `/categorias` para ver os IDs e seus tipos. Use uma categoria de despesa com `/despesa` e uma de receita com `/receita`. |
+| `DESCRIÇÃO` | Texto que identifica o lançamento; pode conter espaços, como `Almoço no trabalho`. |
+
+Exemplo: se `/contas` mostrar `27 — Salário` e `/categorias` mostrar `64 — Lazer (despesa)`, envie `/despesa 25,90 27 64 Cinema`. Isso registra R$ 25,90 de despesa na conta Salário, na categoria Lazer, com a descrição Cinema. Para uma receita, se a categoria `60 — Salário (receita)` estiver disponível, envie `/receita 100,00 27 60 Teste de receita`.
+
+O bot usa a data de hoje no fuso de São Paulo e responde com uma confirmação. Para interromper o acesso pelo Telegram, use **Desvincular** em Configurações. O bot responde apenas em conversas privadas.
 
 ## Verificações
 
