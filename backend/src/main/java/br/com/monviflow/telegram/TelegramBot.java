@@ -1,6 +1,9 @@
 package br.com.monviflow.telegram;
 
 import br.com.monviflow.account.AccountRepository;
+import br.com.monviflow.category.CategoryRepository;
+import br.com.monviflow.transaction.CreateTransactionRequest;
+import br.com.monviflow.transaction.TransactionService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -9,6 +12,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.Map;
@@ -27,17 +32,22 @@ public class TelegramBot {
     private static final Logger log = LoggerFactory.getLogger(TelegramBot.class);
     private final TelegramLinkService links;
     private final AccountRepository accounts;
+    private final CategoryRepository categories;
+    private final TransactionService transactions;
     private final ObjectMapper json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final String baseUrl;
     private long offset;
 
-    public TelegramBot(TelegramLinkService links, AccountRepository accounts, ObjectMapper json,
+    public TelegramBot(TelegramLinkService links, AccountRepository accounts, CategoryRepository categories,
+            TransactionService transactions, ObjectMapper json,
             @Value("${telegram.bot-token:}") String token) {
         if (token.isBlank())
             throw new IllegalStateException("TELEGRAM_BOT_TOKEN is required when Telegram is enabled");
         this.links = links;
         this.accounts = accounts;
+        this.categories = categories;
+        this.transactions = transactions;
         this.json = json;
         this.baseUrl = "https://api.telegram.org/bot" + token + "/";
     }
@@ -76,6 +86,10 @@ public class TelegramBot {
         String text = message.path("text").asText("").trim();
         if (text.equals("/saldo")) {
             sendBalance(chatId, senderId);
+        } else if (text.equals("/contas") || text.equals("/categorias")) {
+            sendOptions(chatId, senderId, text.equals("/contas"));
+        } else if (text.matches("(?is)^/(despesa|receita)(?:\\s.*)?$")) {
+            createTransaction(chatId, senderId, text);
         } else if (text.startsWith("/vincular ")) {
             String code = text.substring("/vincular ".length()).trim();
             send(chatId, links.link(code, senderId)
@@ -83,9 +97,57 @@ public class TelegramBot {
                     : "Código inválido ou expirado. Gere outro nas Configurações do MonviFlow.");
         } else if (text.equals("/start") || text.equals("/vincular")) {
             send(chatId,
-                    "Abra Configurações no MonviFlow, gere um código e envie /vincular CÓDIGO aqui. Depois use /saldo.");
+                    "Abra Configurações no MonviFlow, gere um código e envie /vincular CÓDIGO aqui. Depois use /ajuda.");
         } else if (text.startsWith("/")) {
-            send(chatId, "Comandos disponíveis: /saldo e /vincular CÓDIGO.");
+            send(chatId, "Comandos: /saldo, /contas, /categorias, /despesa VALOR CONTA CATEGORIA DESCRIÇÃO, /receita VALOR CONTA CATEGORIA DESCRIÇÃO e /vincular CÓDIGO.");
+        }
+    }
+
+    private void sendOptions(long chatId, long telegramUserId, boolean accountList) throws Exception {
+        var userId = links.userIdForTelegram(telegramUserId);
+        if (userId.isEmpty()) {
+            send(chatId, "Vincule sua conta primeiro com /vincular CÓDIGO.");
+            return;
+        }
+        StringBuilder message = new StringBuilder(accountList ? "Contas:\n" : "Categorias:\n");
+        if (accountList) {
+            for (var account : accounts.findSummaries(userId.get(), null))
+                message.append(account.getId()).append(" — ").append(account.getName()).append('\n');
+        } else {
+            for (var category : categories.findAllByUserIdOrderByIdAsc(userId.get()))
+                message.append(category.getId()).append(" — ").append(category.getName())
+                        .append(category.getType() == br.com.monviflow.category.CategoryType.INCOME
+                                ? " (receita)\n" : " (despesa)\n");
+        }
+        send(chatId, message.length() > (accountList ? 8 : 12) ? message.toString().strip()
+                : "Nenhum item cadastrado. Cadastre pelo MonviFlow primeiro.");
+    }
+
+    private void createTransaction(long chatId, long telegramUserId, String text) throws Exception {
+        var userId = links.userIdForTelegram(telegramUserId);
+        if (userId.isEmpty()) {
+            send(chatId, "Vincule sua conta primeiro com /vincular CÓDIGO.");
+            return;
+        }
+        try {
+            var command = TelegramTransactionCommand.parse(text);
+            var category = categories.findByIdAndUserId(command.categoryId(), userId.get());
+            if (category.isEmpty() || category.get().getType() != command.type()) {
+                send(chatId, "Categoria não encontrada ou incompatível com o tipo do lançamento. Confira /categorias.");
+                return;
+            }
+            if (accounts.findByIdAndUserId(command.accountId(), userId.get()).isEmpty()) {
+                send(chatId, "Conta não encontrada. Confira /contas.");
+                return;
+            }
+            var result = transactions.createForUser(userId.get(), new CreateTransactionRequest(
+                    command.accountId(), command.categoryId(), command.description(), command.amount(),
+                    LocalDate.now(ZoneId.of("America/Sao_Paulo"))));
+            send(chatId, "Lançamento registrado (#" + result.id() + "): " + result.description() + " — "
+                    + NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(command.amount())
+                    + " em " + result.accountName() + ".");
+        } catch (IllegalArgumentException exception) {
+            send(chatId, exception.getMessage());
         }
     }
 

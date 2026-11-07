@@ -33,7 +33,11 @@ public class TransactionService {
 
     @Transactional
     public TransactionResponse create(String email, CreateTransactionRequest request) {
-        Long userId = userId(email);
+        return createForUser(userId(email), request);
+    }
+
+    @Transactional
+    public TransactionResponse createForUser(Long userId, CreateTransactionRequest request) {
         var account = accounts.findByIdAndUserId(request.accountId(), userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var category = categories.findByIdAndUserId(request.categoryId(), userId)
