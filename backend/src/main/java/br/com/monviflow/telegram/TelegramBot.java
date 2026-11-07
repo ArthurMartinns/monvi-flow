@@ -3,7 +3,6 @@ package br.com.monviflow.telegram;
 import br.com.monviflow.account.AccountRepository;
 import br.com.monviflow.category.CategoryRepository;
 import br.com.monviflow.transaction.CreateTransactionRequest;
-import br.com.monviflow.transaction.TransactionService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -33,14 +32,14 @@ public class TelegramBot {
     private final TelegramLinkService links;
     private final AccountRepository accounts;
     private final CategoryRepository categories;
-    private final TransactionService transactions;
+    private final TelegramTransactionService transactions;
     private final ObjectMapper json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final String baseUrl;
     private long offset;
 
     public TelegramBot(TelegramLinkService links, AccountRepository accounts, CategoryRepository categories,
-            TransactionService transactions, ObjectMapper json,
+            TelegramTransactionService transactions, ObjectMapper json,
             @Value("${telegram.bot-token:}") String token) {
         if (token.isBlank())
             throw new IllegalStateException("TELEGRAM_BOT_TOKEN is required when Telegram is enabled");
@@ -62,11 +61,12 @@ public class TelegramBot {
                 return;
             }
             for (JsonNode update : response.path("result")) {
-                offset = Math.max(offset, update.path("update_id").asLong() + 1);
                 try {
                     onUpdate(update);
+                    offset = Math.max(offset, update.path("update_id").asLong() + 1);
                 } catch (Exception exception) {
                     log.warn("Could not handle Telegram update: {}", exception.getClass().getSimpleName());
+                    break;
                 }
             }
         } catch (Exception exception) {
@@ -89,7 +89,7 @@ public class TelegramBot {
         } else if (text.equals("/contas") || text.equals("/categorias")) {
             sendOptions(chatId, senderId, text.equals("/contas"));
         } else if (text.matches("(?is)^/(despesa|receita)(?:\\s.*)?$")) {
-            createTransaction(chatId, senderId, text);
+            createTransaction(chatId, senderId, update.path("update_id").asLong(), text);
         } else if (text.startsWith("/vincular ")) {
             String code = text.substring("/vincular ".length()).trim();
             send(chatId, links.link(code, senderId)
@@ -123,7 +123,7 @@ public class TelegramBot {
                 : "Nenhum item cadastrado. Cadastre pelo MonviFlow primeiro.");
     }
 
-    private void createTransaction(long chatId, long telegramUserId, String text) throws Exception {
+    private void createTransaction(long chatId, long telegramUserId, long updateId, String text) throws Exception {
         var userId = links.userIdForTelegram(telegramUserId);
         if (userId.isEmpty()) {
             send(chatId, "Vincule sua conta primeiro com /vincular CÓDIGO.");
@@ -140,12 +140,16 @@ public class TelegramBot {
                 send(chatId, "Conta não encontrada. Confira /contas.");
                 return;
             }
-            var result = transactions.createForUser(userId.get(), new CreateTransactionRequest(
+            var result = transactions.createOnce(updateId, userId.get(), new CreateTransactionRequest(
                     command.accountId(), command.categoryId(), command.description(), command.amount(),
                     LocalDate.now(ZoneId.of("America/Sao_Paulo"))));
-            send(chatId, "Lançamento registrado (#" + result.id() + "): " + result.description() + " — "
+            if (result.isEmpty()) {
+                send(chatId, "Esta mensagem já foi processada; nenhum lançamento duplicado foi criado.");
+                return;
+            }
+            send(chatId, "Lançamento registrado (#" + result.get().id() + "): " + result.get().description() + " — "
                     + NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR")).format(command.amount())
-                    + " em " + result.accountName() + ".");
+                    + " em " + result.get().accountName() + ".");
         } catch (IllegalArgumentException exception) {
             send(chatId, exception.getMessage());
         }
