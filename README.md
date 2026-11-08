@@ -1,108 +1,80 @@
 # MonviFlow
 
-Gerenciador de finanças pessoais em desenvolvimento, com backend em Java e Spring Boot,
-frontend em React e TypeScript e banco PostgreSQL.
+Aplicação de finanças pessoais para acompanhar contas, lançamentos e orçamentos. Projeto de portfólio desenvolvido com **Java 21, Spring Boot, PostgreSQL, React e TypeScript**.
 
 ## Funcionalidades
 
-- Cadastro, login e logout com autenticação por sessão.
-- Contas com saldo inicial e saldo atual, incluindo valores negativos.
-- Categorias de receita/despesa, com categorias iniciais no cadastro.
-- Movimentações com edição, exclusão, paginação, filtros e exportação CSV.
-- Visão geral com filtros por conta e mês, gráficos diário/mensal e últimos lançamentos.
-- Orçamentos mensais por categoria e alertas de limite.
-- Configurações com dados da conta e alteração do nome.
-- Alteração de senha com confirmação da senha atual.
-- Consulta de saldos pelo bot do Telegram após vinculação da conta.
+- Cadastro e acesso com autenticação por sessão; edição do perfil e troca de senha.
+- Contas com saldo inicial e saldo calculado a partir dos lançamentos.
+- Receitas e despesas com categorias, edição, exclusão, filtros, paginação e exportação CSV.
+- Visão geral com gráficos, histórico, saldo por conta e filtros por mês e conta.
+- Orçamentos mensais por categoria com alertas de limite.
+- Bot do Telegram para consultar saldos, lançamentos recentes e resumo do mês, além de registrar receitas e despesas.
 
-Os filtros ficam na URL, permitindo atualizar a página, favoritar uma consulta e usar voltar/avançar
-sem perder o contexto. Os orçamentos consideram todas as contas do usuário.
-
-## Requisitos
-
-- Java 21
-- Node.js 24 e npm
-- Docker com Docker Compose
+Os filtros da aplicação web ficam na URL, permitindo compartilhar ou retomar uma consulta.
 
 ## Executar localmente
 
-Na raiz do projeto, copie `.env.example` para `.env`, defina `POSTGRES_PASSWORD` e inicie o banco:
+Requisitos: **Java 21**, **Node.js 24 com npm** e **Docker com Docker Compose**.
 
-```cmd
-copy .env.example .env
-docker compose up -d postgres
-```
+1. Na raiz do projeto, copie `.env.example` para `.env`, escolha uma senha em `POSTGRES_PASSWORD` e inicie o PostgreSQL:
 
-Em um terminal CMD, inicie o backend usando a mesma senha do `.env`:
+   ```powershell
+   Copy-Item .env.example .env
+   docker compose up -d postgres
+   ```
 
-```cmd
-cd backend
-set "POSTGRES_PASSWORD=SUA_SENHA_LOCAL"
-mvnw.cmd spring-boot:run
-```
+2. Em outro terminal, inicie o backend com a mesma senha definida no `.env`:
 
-Em outro terminal, inicie o frontend:
+   ```powershell
+   cd backend
+   $env:POSTGRES_PASSWORD = "SUA_SENHA_LOCAL"
+   .\mvnw.cmd spring-boot:run
+   ```
 
-```cmd
-cd frontend
-npm ci
-npm run dev
-```
+3. Em outro terminal, inicie o frontend:
 
-Acesse http://127.0.0.1:5173. O backend roda na porta 8080.
+   ```powershell
+   cd frontend
+   npm.cmd ci
+   npm.cmd run dev
+   ```
 
-## Bot do Telegram
+Acesse **http://127.0.0.1:5173**. A API usa a porta **8080** e o PostgreSQL local usa a porta **5434**. Para testar a aplicação, crie uma conta pela tela de cadastro e adicione contas, categorias e lançamentos.
 
-Na versão web, abra **Configurações → Telegram** e gere um código de vinculação. Em uma conversa privada com [@monviflowbot](https://t.me/monviflowbot), envie `/vincular CÓDIGO` usando o código exibido. Ele vale por 10 minutos e só pode ser usado uma vez.
+### Bot do Telegram (opcional)
 
-Depois de vincular, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Use `/ultimos` para ver os cinco lançamentos mais recentes ou `/resumo` para consultar receitas, despesas e resultado do mês atual (fuso de São Paulo). Para registrar uma movimentação, use um destes formatos:
+O bot fica desativado por padrão. Para ativá-lo, defina `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN` e `TELEGRAM_BOT_USERNAME` no ambiente do backend antes de iniciá-lo. O token deve permanecer privado.
 
-```text
-/despesa VALOR ID_DA_CONTA ID_DA_CATEGORIA DESCRIÇÃO
-/receita VALOR ID_DA_CONTA ID_DA_CATEGORIA DESCRIÇÃO
-```
+Na aplicação, abra **Configurações → Telegram**, gere um código e envie `/vincular CÓDIGO` em uma conversa privada com o bot. O código expira em 10 minutos. Use `/contas` e `/categorias` para consultar os IDs necessários aos lançamentos.
 
-Os campos são separados por espaços e devem aparecer nesta ordem:
-
-| Campo | O que informar |
+| Comando | Função |
 | --- | --- |
-| `/despesa` ou `/receita` | Escolha `/despesa` para uma saída de dinheiro ou `/receita` para uma entrada. |
-| `VALOR` | Valor positivo em reais, com até duas casas decimais. Aceita vírgula ou ponto, como `25,90`. |
-| `ID_DA_CONTA` | Número da conta em que o dinheiro saiu ou entrou. Envie `/contas` ao bot para ver os IDs das suas contas. |
-| `ID_DA_CATEGORIA` | Número da categoria do lançamento. Envie `/categorias` para ver os IDs e seus tipos. Use uma categoria de despesa com `/despesa` e uma de receita com `/receita`. |
-| `DESCRIÇÃO` | Texto que identifica o lançamento; pode conter espaços, como `Almoço no trabalho`. |
+| `/saldo` | Saldo total e por conta. |
+| `/ultimos` | Cinco lançamentos mais recentes. |
+| `/resumo` | Receitas, despesas e resultado do mês atual. |
+| `/despesa 25,90 27 64 Cinema` | Registra uma despesa: valor, ID da conta, ID da categoria e descrição. |
+| `/receita 100,00 27 60 Salário` | Registra uma receita no mesmo formato. |
 
-Exemplo: se `/contas` mostrar `27 — Salário` e `/categorias` mostrar `64 — Lazer (despesa)`, envie `/despesa 25,90 27 64 Cinema`. Isso registra R$ 25,90 de despesa na conta Salário, na categoria Lazer, com a descrição Cinema. Para uma receita, se a categoria `60 — Salário (receita)` estiver disponível, envie `/receita 100,00 27 60 Teste de receita`.
-
-O bot usa a data de hoje no fuso de São Paulo e responde com uma confirmação. Para interromper o acesso pelo Telegram, use **Desvincular** em Configurações. O bot responde apenas em conversas privadas.
+Os lançamentos feitos pelo bot usam a data atual no fuso de São Paulo. Para revogar o acesso, use **Desvincular** em Configurações.
 
 ## Verificações
 
-Com o Docker aberto, execute na pasta `backend`:
+Com o Docker em execução, rode os testes de integração do backend:
 
-```cmd
-mvnw.cmd test
+```powershell
+cd backend
+.\mvnw.cmd test
 ```
 
-Na pasta `frontend`:
+No frontend, verifique a compilação e o código:
 
-```cmd
-npm run build
-npm run lint
+```powershell
+cd frontend
+npm.cmd run build
+npm.cmd run lint
 ```
 
-## Demonstração local
+## Limites atuais
 
-Crie uma conta fictícia pela tela de cadastro. Use, por exemplo, o e-mail `demo@monviflow.local` e uma senha de demonstração. Depois, cadastre duas contas (como Conta corrente e Reserva), algumas categorias e movimentações nos meses atual e anterior. Crie orçamentos para duas categorias de despesa.
-
-Para apresentar: entre com a conta demo, alterne os gráficos diário/mensal, selecione uma conta,
-abra uma categoria para conferir as movimentações filtradas e exporte o CSV. Edite um lançamento
-e retorne à visão geral para conferir os novos valores. Em Configurações, altere o nome, confira o menu
-e experimente a alteração de senha. Os dados são gravados no banco local; para começar novamente,
-apague os dados da conta pela interface ou recrie o banco de desenvolvimento.
-
-## Escopo da versão web
-
-Valores apenas em BRL, datas de movimentação sem horário e sem lançamentos futuros. O saldo é calculado
-a partir do saldo inicial e dos lançamentos. Contas e categorias com registros vinculados não podem
-ser excluídas. Em Configurações, o e-mail de acesso permanece fixo.
+Os valores são em reais (BRL). Os lançamentos têm data sem horário e não aceitam datas futuras. Contas e categorias usadas por lançamentos não podem ser excluídas. O e-mail de acesso não pode ser alterado pela interface.
