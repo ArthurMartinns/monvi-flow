@@ -20,6 +20,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long>,
   @EntityGraph(attributePaths = { "account", "category" })
   List<Transaction> findAllByUserIdOrderByDateDescIdDesc(Long userId);
 
+  @EntityGraph(attributePaths = { "account", "category" })
+  List<Transaction> findTop5ByUserIdOrderByDateDescIdDesc(Long userId);
+
   Optional<Transaction> findByIdAndUserId(Long id, Long userId);
 
   @Override

@@ -55,7 +55,7 @@ Acesse http://127.0.0.1:5173. O backend roda na porta 8080.
 
 Na versão web, abra **Configurações → Telegram** e gere um código de vinculação. Em uma conversa privada com [@monviflowbot](https://t.me/monviflowbot), envie `/vincular CÓDIGO` usando o código exibido. Ele vale por 10 minutos e só pode ser usado uma vez.
 
-Depois de vincular, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Para registrar uma movimentação, use um destes formatos:
+Depois de vincular, envie `/saldo` para consultar o saldo total e o saldo de cada conta. Use `/ultimos` para ver os cinco lançamentos mais recentes ou `/resumo` para consultar receitas, despesas e resultado do mês atual (fuso de São Paulo). Para registrar uma movimentação, use um destes formatos:
 
 ```text
 /despesa VALOR ID_DA_CONTA ID_DA_CATEGORIA DESCRIÇÃO

@@ -13,6 +13,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.Map;
@@ -33,13 +34,14 @@ public class TelegramBot {
     private final AccountRepository accounts;
     private final CategoryRepository categories;
     private final TelegramTransactionService transactions;
+    private final TelegramQueryService queries;
     private final ObjectMapper json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final String baseUrl;
     private long offset;
 
     public TelegramBot(TelegramLinkService links, AccountRepository accounts, CategoryRepository categories,
-            TelegramTransactionService transactions, ObjectMapper json,
+            TelegramTransactionService transactions, TelegramQueryService queries, ObjectMapper json,
             @Value("${telegram.bot-token:}") String token) {
         if (token.isBlank())
             throw new IllegalStateException("TELEGRAM_BOT_TOKEN is required when Telegram is enabled");
@@ -47,6 +49,7 @@ public class TelegramBot {
         this.accounts = accounts;
         this.categories = categories;
         this.transactions = transactions;
+        this.queries = queries;
         this.json = json;
         this.baseUrl = "https://api.telegram.org/bot" + token + "/";
     }
@@ -86,6 +89,16 @@ public class TelegramBot {
         String text = message.path("text").asText("").trim();
         if (text.equals("/saldo")) {
             sendBalance(chatId, senderId);
+        } else if (text.equals("/ultimos") || text.equals("/resumo")) {
+            var userId = links.userIdForTelegram(senderId);
+            if (userId.isEmpty()) {
+                send(chatId, "Vincule sua conta primeiro com /vincular CÓDIGO.");
+            } else if (text.equals("/ultimos")) {
+                send(chatId, queries.recent(userId.get()));
+            } else {
+                send(chatId, queries.summary(userId.get(),
+                        YearMonth.now(ZoneId.of("America/Sao_Paulo"))));
+            }
         } else if (text.equals("/contas") || text.equals("/categorias")) {
             sendOptions(chatId, senderId, text.equals("/contas"));
         } else if (text.matches("(?is)^/(despesa|receita)(?:\\s.*)?$")) {
@@ -99,7 +112,7 @@ public class TelegramBot {
             send(chatId,
                     "Abra Configurações no MonviFlow, gere um código e envie /vincular CÓDIGO aqui. Depois use /ajuda.");
         } else if (text.startsWith("/")) {
-            send(chatId, "Comandos: /saldo, /contas, /categorias, /despesa VALOR CONTA CATEGORIA DESCRIÇÃO, /receita VALOR CONTA CATEGORIA DESCRIÇÃO e /vincular CÓDIGO.");
+            send(chatId, "Comandos: /saldo, /ultimos, /resumo, /contas, /categorias, /despesa VALOR CONTA CATEGORIA DESCRIÇÃO, /receita VALOR CONTA CATEGORIA DESCRIÇÃO e /vincular CÓDIGO.");
         }
     }
 
