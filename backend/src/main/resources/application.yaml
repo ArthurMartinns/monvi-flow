@@ -3,8 +3,8 @@ spring:
     name: monviflow
 
   datasource:
-    url: jdbc:postgresql://localhost:5434/monviflow
-    username: monviflow
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5434/monviflow}
+    username: ${POSTGRES_USER:monviflow}
     password: ${POSTGRES_PASSWORD}
 
   jpa:
@@ -16,12 +16,22 @@ spring:
     enabled: true
 
 server:
+  port: ${PORT:8080}
   servlet:
     session:
       timeout: 30m
       cookie:
         http-only: true
         same-site: lax
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 telegram:
   enabled: ${TELEGRAM_ENABLED:false}
